@@ -1,0 +1,6 @@
+# Local research environments and personal notes are not deployment inputs.
+.venv/
+.cache/
+**/__pycache__/
+docs/IMPLEMENTATION_GUIDE.md
+docs/teaching/
