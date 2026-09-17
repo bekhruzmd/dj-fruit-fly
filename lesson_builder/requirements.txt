@@ -1,0 +1,5 @@
+# No new pip packages: install analysis/requirements.txt first for librosa/soundfile/numpy.
+# lesson_builder shells out to system binaries rather than importing Python bindings for them:
+#   brew install ffmpeg yt-dlp
+# ffmpeg/ffprobe decode and probe media; yt-dlp performs best-effort URL import. Both must be
+# on PATH. No binary is downloaded, vendored, or pip-installed by this package.

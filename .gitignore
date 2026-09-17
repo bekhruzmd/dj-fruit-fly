@@ -25,13 +25,16 @@ dist-ssr
 
 # Local analysis environment, cache, and personal teaching material
 .venv/
+.venv-snn/
 .cache/
 __pycache__/
 *.pyc
 docs/IMPLEMENTATION_GUIDE.md
 docs/MASTER_ROADMAP.md
+docs/CLAUDE.md
 docs/audio-evaluation.json
 docs/teaching/
 
 # Raw model source — production copy lives in public/models/fly/
 wildtype_male_drosophila_melanogaster/
+.vercel

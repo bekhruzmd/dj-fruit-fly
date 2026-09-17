@@ -9,10 +9,16 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "node scripts/test.mjs",
+    "test:snn": ".venv-snn/bin/python -m unittest discover -s tests -p \"test_snn_dj.py\" -v",
+    "train:snn": ".venv-snn/bin/python -m snn_dj",
     "test:browser": "node scripts/browser-check.mjs",
     "analysis": ".venv/bin/python -m analysis.server",
     "test:analysis": ".venv/bin/python -m unittest discover -s tests -p \"test_analysis.py\"",
-    "test:analysis:browser": "node scripts/analysis-browser-check.mjs"
+    "test:analysis:browser": "node scripts/analysis-browser-check.mjs",
+    "lesson-builder": ".venv/bin/python -m lesson_builder.server",
+    "test:lesson": ".venv/bin/python -m unittest discover -s tests -p \"test_lesson_builder.py\" -v",
+    "test:lesson-loader": ".venv-snn/bin/python -m unittest discover -s tests -p \"test_lesson_loader.py\" -v",
+    "lesson:example": ".venv/bin/python scripts/make-lesson-example.py"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",

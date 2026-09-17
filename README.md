@@ -78,6 +78,10 @@ Limits: uploads up to 100 MB, duration up to ten minutes, and up to 40 million d
 
 ## Verification
 
+The optional [Python spiking DJ experiment](docs/SPIKING_DJ.md) adds waveform/MIDI-to-spike encoding, musical coherence rewards, and a Brian2 reinforcement loop. Run `npm run train:snn` after installing `snn_dj/requirements.txt`; `npm run test:snn` checks this separate backend. It includes an offline PCM mixer and labeled synthetic wiring, with an explicit sparse-graph interface for connectome data. It does not replace the browser rate model or bundle MaleCNS.
+
+The optional [DJ Lesson Builder](docs/LESSON_BUILDER.md) turns an imported local video/audio clip or public URL into a versioned, schema-validated lesson folder that `snn_dj/` can load for reference-based comparison. Run `npm run lesson-builder` alongside `npm run dev`, after `brew install ffmpeg yt-dlp`; `npm run test:lesson` and `npm run test:lesson-loader` check it. It validates and loads paired-action lessons but does not implement an imitation-learning algorithm, and it never infers controller values from audio or video.
+
 ```sh
 npm test
 npm run test:analysis

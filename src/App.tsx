@@ -1,6 +1,7 @@
 import { analyzeTrack } from './audio/AnalysisClient';
 import { type TrackAnalysis, type BeatGrid } from './audio/TrackAnalysis';
 import { TrackAnalysisPanel } from './graphics/TrackAnalysisPanel';
+import { LessonBuilderPanel } from './graphics/LessonBuilderPanel';
 import { SetRecorder } from './audio/SetRecorder';
 import { DemonstrationPanel, type DemoSample } from './graphics/DemonstrationPanel';
 import { applyImitation, type ImitationResult } from './neural/DemonstrationLearning';
@@ -19,6 +20,7 @@ import { FlyWireCircuit, type CircuitTelemetry } from './neural/FlyWireCircuit';
 import { FlyAvatar3D } from './graphics/FlyAvatar3D';
 import { CircuitHUD } from './graphics/CircuitHUD';
 import { LearningPlotsPanel } from './graphics/LearningPlotsPanel';
+import './App.css';
 
 type AnalysisState = { status: 'idle' | 'loading' | 'analyzing' | 'ready' | 'error'; analysis?: TrackAnalysis; cacheHit?: boolean; error?: string };
 
@@ -67,6 +69,8 @@ export const App: React.FC = () => {
   const [showHUD, setShowHUD] = useState<boolean>(true);
   const [showPlots, setShowPlots] = useState<boolean>(false);
   const [showGuide, setShowGuide] = useState<boolean>(false);
+  const [showLessonBuilder, setShowLessonBuilder] = useState<boolean>(false);
+  const closeLessonBuilder = useCallback(() => setShowLessonBuilder(false), []);
 
   // Circuit Tuning State
   const [learningEnabled, setLearningEnabled] = useState<boolean>(true);
@@ -561,6 +565,8 @@ export const App: React.FC = () => {
           context={audioContextRef.current} buffer={djEngineRef.current.getDeckBuffer(editingDeck)!}
           onApply={grid => applyGrid(editingDeck, grid)} onClose={closeGrid} />}
 
+      {showLessonBuilder && <LessonBuilderPanel onClose={closeLessonBuilder} />}
+
       {/* Hidden File Inputs for Deck A and Deck B */}
       <input
         type="file"
@@ -666,6 +672,13 @@ export const App: React.FC = () => {
             title="Toggle learning dashboard"
           >
             <TrendingUp size={15} /> {showPlots ? 'Hide Learning' : 'Show Learning'}
+          </button>
+          <button
+            className="guide-btn"
+            onClick={() => setShowLessonBuilder(!showLessonBuilder)}
+            title="Open the local DJ Lesson Builder"
+          >
+            <Upload size={15} /> Lesson Builder
           </button>
           <button 
             className="guide-btn"

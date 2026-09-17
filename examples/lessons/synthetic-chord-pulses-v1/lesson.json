@@ -1,0 +1,380 @@
+{
+  "schemaVersion": 1,
+  "lessonId": "synthetic-chord-pulses",
+  "title": "Original synthetic chord and pulses",
+  "performance_group_id": "sha256:6bd9031e061330ded1b91924e10de0ff7640497d9b3cb236b4f3ee6428ef86aa",
+  "segment": {
+    "startSeconds": 0.0,
+    "endSeconds": 3.0
+  },
+  "timeline": "All feature/event times are seconds from the original imported file start. reference.wav sample zero is audio.referenceStartSeconds. Segment bounds are half-open original-file seconds; actions[].timestamp is seconds relative to segment.startSeconds. Source sample zero maps to the reviewed sourceAOffsetSeconds or sourceBOffsetSeconds on the original reference timeline.",
+  "audio": {
+    "referenceFile": "reference.wav",
+    "referenceStartSeconds": 0.0,
+    "originalDurationSeconds": 3.0,
+    "referenceDurationSeconds": 3.0,
+    "referenceSampleRate": 22050,
+    "referenceChannels": 1,
+    "analysisSampleRate": 22050,
+    "trimOffsetSeconds": 0.0,
+    "transformations": [
+      {
+        "step": "reference_decode",
+        "tool": "ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers",
+        "params": {
+          "codec": "pcm_s24le",
+          "resampled": false,
+          "remixed": false,
+          "audioStream": 0,
+          "referenceStartSeconds": 0.0
+        }
+      },
+      {
+        "step": "decode_for_analysis",
+        "tool": "soundfile-0.13.1",
+        "params": {
+          "dtype": "float64",
+          "inputSampleRate": 22050,
+          "inputChannels": 1
+        }
+      },
+      {
+        "step": "channel_remix",
+        "tool": "numpy",
+        "params": {
+          "method": "duplicate_mono",
+          "outputChannels": 2
+        }
+      },
+      {
+        "step": "analysis_segment",
+        "tool": "numpy",
+        "params": {
+          "requestedStartSeconds": 0,
+          "requestedEndSeconds": 3.0,
+          "startSample": 0,
+          "endSampleExclusive": 66150,
+          "actualStartSeconds": 0.0,
+          "actualEndSeconds": 3.0,
+          "toleranceSeconds": 4.5351473922902495e-05
+        }
+      },
+      {
+        "step": "rhythm_pitch_channel_selection",
+        "tool": "numpy",
+        "params": {
+          "channel": 0,
+          "method": "highest_mean_square_energy"
+        }
+      }
+    ]
+  },
+  "provenance": {
+    "sourceType": "local_file",
+    "url": null,
+    "creator": null,
+    "uploadDate": null,
+    "importedAt": "2026-09-17T00:53:32.094147+00:00",
+    "fileHash": "6bd9031e061330ded1b91924e10de0ff7640497d9b3cb236b4f3ee6428ef86aa",
+    "ffmpegVersion": "ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers",
+    "ffprobeVersion": "ffprobe version 9.0.1 Copyright (c) 2007-2026 the FFmpeg developers",
+    "ytDlpVersion": null,
+    "extractionCommand": [
+      "ffmpeg",
+      "-nostdin",
+      "-v",
+      "error",
+      "-y",
+      "-i",
+      "<imported-media>",
+      "-map",
+      "0:a:0",
+      "-vn",
+      "-map_metadata",
+      "-1",
+      "-c:a",
+      "pcm_s24le",
+      "reference.wav"
+    ],
+    "probe": {
+      "format": {
+        "format_name": "wav",
+        "duration": "3.000000",
+        "start_time": null
+      },
+      "audio": {
+        "index": 0,
+        "codec_name": "pcm_s16le",
+        "sample_fmt": "s16",
+        "sample_rate": "22050",
+        "channels": 1,
+        "channel_layout": null,
+        "start_time": null,
+        "duration": "3.000000",
+        "bits_per_raw_sample": null
+      }
+    }
+  },
+  "analysisVersion": {
+    "lessonBuilder": "0.1.0",
+    "rhythmAlgorithm": "librosa-0.11.0-dj-grid-1",
+    "rhythmCacheVersion": "d27293e26dd8"
+  },
+  "measured": {
+    "times": {
+      "npzKey": "times"
+    },
+    "rms": {
+      "npzKey": "rms"
+    },
+    "spectralFlux": {
+      "npzKey": "spectralFlux"
+    },
+    "bandEnergy": {
+      "npzKey": "bandEnergy"
+    }
+  },
+  "heuristicEstimates": {
+    "rhythm": {
+      "bpm": null,
+      "beatTimes": [],
+      "gridOffsetSeconds": null,
+      "confidence": {
+        "score": 0.0,
+        "kind": "heuristic",
+        "regularity": 0.0,
+        "onsetSupport": 0.0
+      },
+      "tempoAlternatives": [],
+      "onsetTimes": [
+        0.3250793650793651,
+        0.8243083900226758,
+        1.3235374149659864,
+        1.822766439909297,
+        2.3219954648526078,
+        2.8328344671201813
+      ],
+      "warnings": [
+        "Insufficient rhythmic evidence; enter and audition a manual grid."
+      ]
+    },
+    "chroma": {
+      "npzKey": "chroma"
+    },
+    "possibleKeys": [
+      {
+        "key": "C# minor",
+        "correlation": 0.7714085774769753,
+        "confidence": 0.7714085774769753
+      },
+      {
+        "key": "A major",
+        "correlation": 0.6193083013650342,
+        "confidence": 0.6193083013650342
+      },
+      {
+        "key": "E major",
+        "correlation": 0.5146564238914689,
+        "confidence": 0.5146564238914689
+      },
+      {
+        "key": "A minor",
+        "correlation": 0.4484260627941083,
+        "confidence": 0.4484260627941083
+      },
+      {
+        "key": "E minor",
+        "correlation": 0.18724564584393075,
+        "confidence": 0.18724564584393075
+      },
+      {
+        "key": "C# major",
+        "correlation": 0.13490854889466938,
+        "confidence": 0.13490854889466938
+      },
+      {
+        "key": "C major",
+        "correlation": 0.09122170369914369,
+        "confidence": 0.09122170369914369
+      },
+      {
+        "key": "F# minor",
+        "correlation": 0.07599919478235528,
+        "confidence": 0.07599919478235528
+      },
+      {
+        "key": "G# major",
+        "correlation": 0.0546906901783104,
+        "confidence": 0.0546906901783104
+      },
+      {
+        "key": "A# minor",
+        "correlation": 0.03423980480772373,
+        "confidence": 0.03423980480772373
+      },
+      {
+        "key": "F minor",
+        "correlation": 0.024032936030885712,
+        "confidence": 0.024032936030885712
+      },
+      {
+        "key": "D major",
+        "correlation": -0.13401049214126795,
+        "confidence": 0
+      },
+      {
+        "key": "D# major",
+        "correlation": -0.2867467861172736,
+        "confidence": 0
+      },
+      {
+        "key": "F major",
+        "correlation": -0.026184812351242887,
+        "confidence": 0
+      },
+      {
+        "key": "F# major",
+        "correlation": -0.2283930058446993,
+        "confidence": 0
+      },
+      {
+        "key": "G major",
+        "correlation": -0.2718564904362555,
+        "confidence": 0
+      },
+      {
+        "key": "A# major",
+        "correlation": -0.28719646921383374,
+        "confidence": 0
+      },
+      {
+        "key": "B major",
+        "correlation": -0.18039761192405368,
+        "confidence": 0
+      },
+      {
+        "key": "C minor",
+        "correlation": -0.22761311281336688,
+        "confidence": 0
+      },
+      {
+        "key": "D minor",
+        "correlation": -0.00765883771358333,
+        "confidence": 0
+      },
+      {
+        "key": "D# minor",
+        "correlation": -0.38529022559390724,
+        "confidence": 0
+      },
+      {
+        "key": "G minor",
+        "correlation": -0.4472300868019363,
+        "confidence": 0
+      },
+      {
+        "key": "G# minor",
+        "correlation": -0.06093153911710254,
+        "confidence": 0
+      },
+      {
+        "key": "B minor",
+        "correlation": -0.412628419696083,
+        "confidence": 0
+      }
+    ],
+    "suggestedTransitionRegions": [],
+    "warnings": [
+      "Suggested mix points and key candidates require human audition. The whole segment may contain simultaneous keys or tempos; no controller actions are inferred."
+    ],
+    "qualityRegions": {
+      "silence": [],
+      "clipping": [],
+      "abruptEdits": [],
+      "speechHeavySuggestions": []
+    }
+  },
+  "featuresManifest": {
+    "times": {
+      "units": "seconds",
+      "sampleRate": 22050,
+      "hopLength": 256,
+      "timestampOrigin": "original_file_start",
+      "frameConvention": "centered_zero_padded",
+      "fftSize": 2048,
+      "shape": [
+        259
+      ],
+      "namespace": "measured"
+    },
+    "rms": {
+      "units": "full_scale_amplitude",
+      "sampleRate": 22050,
+      "hopLength": 256,
+      "timestampOrigin": "original_file_start",
+      "frameConvention": "centered_zero_padded",
+      "fftSize": 2048,
+      "shape": [
+        259
+      ],
+      "namespace": "measured"
+    },
+    "spectralFlux": {
+      "units": "full_scale_amplitude_per_hop",
+      "sampleRate": 22050,
+      "hopLength": 256,
+      "timestampOrigin": "original_file_start",
+      "frameConvention": "centered_zero_padded",
+      "fftSize": 2048,
+      "shape": [
+        259
+      ],
+      "namespace": "measured"
+    },
+    "bandEnergy": {
+      "units": "full_scale_squared",
+      "sampleRate": 22050,
+      "hopLength": 256,
+      "timestampOrigin": "original_file_start",
+      "frameConvention": "centered_zero_padded",
+      "fftSize": 2048,
+      "shape": [
+        5,
+        259
+      ],
+      "namespace": "measured",
+      "bandEdgesHz": [
+        0,
+        60,
+        250,
+        1000,
+        4000,
+        11025.0
+      ]
+    },
+    "chroma": {
+      "units": "relative_pitch_class_strength",
+      "sampleRate": 22050,
+      "hopLength": 256,
+      "timestampOrigin": "original_file_start",
+      "frameConvention": "centered_zero_padded",
+      "fftSize": 2048,
+      "shape": [
+        12,
+        259
+      ],
+      "namespace": "heuristicEstimates"
+    }
+  },
+  "humanAnnotations": {
+    "notes": "Authored synthetic fixture, 3 seconds. No controller log or separately supplied decks."
+  },
+  "sources": {},
+  "observedControllerActions": null,
+  "readiness": "reference_only",
+  "_validation_summary": {
+    "validated": true,
+    "schemaVersion": 1,
+    "validatorVersion": "0.1.0"
+  }
+}
