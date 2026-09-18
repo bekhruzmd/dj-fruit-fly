@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { 
-  Play, Pause, RotateCcw, 
-  Zap, 
+import {
+  Play, Pause, RotateCcw,
+  Zap,
   Eye, EyeOff, ThumbsUp, ThumbsDown,
   Radio, Mic, Wifi, WifiOff, Camera
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { TransitionPanel } from './graphics/TransitionPanel';
+import { idleDisplay, type BridgeDisplayState, type TransitionState } from './bridge/protocol';
 
 import { AudioFeatureExtractor } from './audio/AudioFeatureExtractor';
 import { LiveInputManager, type AudioInputDevice } from './audio/LiveInputManager';
@@ -40,6 +42,10 @@ export default function App() {
 
   // UI State
   const [showHUD, setShowHUD] = useState<boolean>(true);
+  const [demoMoves, setDemoMoves] = useState(true);
+  const [showMix, setShowMix] = useState(true);
+  const [transition, setTransition] = useState<TransitionState | null>(null);
+  const [bridgeDisplay, setBridgeDisplay] = useState<BridgeDisplayState>(idleDisplay());
 
   // Live Telemetry State
   const [telemetry, setTelemetry] = useState<CircuitTelemetry>({
@@ -100,6 +106,7 @@ export default function App() {
   }, []);
 
   const stopLiveAudio = useCallback(() => {
+    djayBridgeRef.current.transitionCommand('stop');
     liveInputManagerRef.current.stopStream();
     liveStreamActiveRef.current = false;
     setLiveStreamActive(false);
@@ -180,7 +187,14 @@ export default function App() {
     const unsubscribeAction = djayBridgeRef.current.onAction((action) => {
       avatar3DRef.current?.onBridgeAction(action);
     });
-    djayBridgeRef.current.connect();
+    const bridge = djayBridgeRef.current;
+    const input = liveInputManagerRef.current;
+    bridge.connect();
+    const heartbeat = window.setInterval(() => {
+      bridge.transitionCommand('heartbeat', { liveAudio: liveStreamActiveRef.current && !document.hidden });
+    }, 250);
+    const stopHidden = () => { if (document.hidden) bridge.transitionCommand('stop'); };
+    document.addEventListener('visibilitychange', stopHidden);
 
     // Auto-discover audio devices (prioritizing BlackHole 2ch)
     void refreshAudioDevices().then((devices) => {
@@ -202,9 +216,26 @@ export default function App() {
     // 6. MAIN REAL-TIME SIMULATION & CONTROL TICK
     let animationFrameId: number;
     let lastTime = performance.now();
+    let lastRenderTimestamp = 0;
     let telemetryThrottle = 0;
+    const minFrameIntervalMs = 1000 / 60; // Max 60 FPS to prevent GPU overheating on 120Hz ProMotion displays
 
     const renderLoop = (time: number) => {
+      animationFrameId = requestAnimationFrame(renderLoop);
+
+      // Pause GPU/WebGL rendering completely when the tab is hidden
+      if (document.hidden) {
+        lastTime = time;
+        return;
+      }
+
+      // Frame limiter: skip render if under frame budget (prevents 120Hz thermal throttling on MacBooks)
+      const elapsedSinceLastRender = time - lastRenderTimestamp;
+      if (elapsedSinceLastRender < minFrameIntervalMs - 1.5) {
+        return;
+      }
+      lastRenderTimestamp = time;
+
       const elapsed = (time - lastTime) / 1000.0;
       const dt = Math.min(0.05, elapsed);
       lastTime = time;
@@ -229,12 +260,8 @@ export default function App() {
         undefined
       );
 
-      // (c) DISPATCH NEURAL MOTOR OUTPUTS TO DJAY PRO BRIDGE
-      djayBridgeRef.current.sendControl({
-        crossfader: curTelemetry.controls.crossfader,
-        filterCutoff: curTelemetry.controls.filterCutoff,
-        stutter: curTelemetry.controls.stutterTrigger,
-      });
+      // Assisted transitions own the mixer. Neural output stays observational until a
+      // learned policy is evaluated against recorded mixes; random cuts never dispatch.
 
       // (d) Animate 3D Rig & Canvas HUD
       if (avatar3DRef.current) {
@@ -256,9 +283,9 @@ export default function App() {
       if (telemetryThrottle > 0.05) {
         telemetryThrottle = 0;
         setTelemetry({ ...curTelemetry });
+        setTransition(bridge.getTransitionState());
+        setBridgeDisplay(bridge.getDisplayState());
       }
-
-      animationFrameId = requestAnimationFrame(renderLoop);
     };
 
     animationFrameId = requestAnimationFrame(renderLoop);
@@ -266,10 +293,14 @@ export default function App() {
     return () => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
+      window.clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', stopHidden);
+      bridge.transitionCommand('stop');
+      avatar3DRef.current?.dispose();
       unsubscribeBridge();
       unsubscribeAction();
-      liveInputManagerRef.current.stopStream();
-      djayBridgeRef.current.disconnect();
+      input.stopStream();
+      bridge.disconnect();
       if (ctx.state !== 'closed') ctx.close();
     };
   }, [refreshAudioDevices, startLiveAudio]);
@@ -277,7 +308,8 @@ export default function App() {
   // Keyboard Shortcuts: Space = Play/Pause, R = Reward, X = Punish
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.code === 'Escape') { djayBridgeRef.current.transitionCommand('stop'); return; }
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLButtonElement) return;
       if (e.code === 'Space') {
         e.preventDefault();
         handleToggleListening();
@@ -340,9 +372,9 @@ export default function App() {
           <div className="crossfader-meter-bar" title="Live Crossfader (Deck 1 ◄──► Deck 2)">
             <span className="cf-label">DECK 1</span>
             <div className="cf-track">
-              <div 
-                className="cf-thumb" 
-                style={{ left: `${telemetry.controls.crossfader * 100}%` }} 
+              <div
+                className="cf-thumb"
+                style={{ left: `${bridgeDisplay.crossfader.value * 100}%`, opacity: bridgeDisplay.crossfader.provenance === 'unknown' ? .25 : 1 }}
               />
             </div>
             <span className="cf-label">DECK 2</span>
@@ -353,7 +385,7 @@ export default function App() {
             {bridgeConnected ? (
               <>
                 <Wifi size={13} className="text-green" />
-                <span>Bridge Active</span>
+                <span>{bridgeDisplay.live ? 'djay connected' : 'Bridge connected · djay unavailable'}</span>
               </>
             ) : (
               <>
@@ -366,23 +398,36 @@ export default function App() {
 
         {/* Camera Views & HUD Toggle */}
         <div className="header-actions">
+          <button className="guide-btn" aria-expanded={showMix} onClick={() => setShowMix(!showMix)}>{showMix ? 'Hide mix controls' : 'Mix controls'}</button>
+          <button
+            className="guide-btn"
+            aria-pressed={demoMoves}
+            title="Silent DJ choreography when the bridge is offline"
+            onClick={() => {
+              const enabled = !demoMoves;
+              setDemoMoves(enabled);
+              if (avatar3DRef.current) avatar3DRef.current.demoMoves = enabled;
+            }}
+          >
+            {demoMoves ? 'Pause demo moves' : 'Play demo moves'}
+          </button>
           <div className="camera-select-chip">
             <Camera size={14} className="text-cyan mr-1" />
-            <button 
+            <button
               className={`cam-btn ${cameraPreset === 'side' ? 'active' : ''}`}
               onClick={() => handleCameraChange('side')}
               title="Cinematic Orbit Angle"
             >
               Orbit
             </button>
-            <button 
+            <button
               className={`cam-btn ${cameraPreset === 'front' ? 'active' : ''}`}
               onClick={() => handleCameraChange('front')}
               title="Crowd Front View"
             >
               Front
             </button>
-            <button 
+            <button
               className={`cam-btn ${cameraPreset === 'dj' ? 'active' : ''}`}
               onClick={() => handleCameraChange('dj')}
               title="Over-the-Shoulder DJ View"
@@ -391,7 +436,7 @@ export default function App() {
             </button>
           </div>
 
-          <button 
+          <button
             className="guide-btn"
             onClick={() => setShowHUD(!showHUD)}
             title="Toggle Neural Circuit HUD"
@@ -401,16 +446,18 @@ export default function App() {
         </div>
       </header>
 
+      {showMix && <TransitionPanel client={djayBridgeRef.current} state={transition} liveAudio={liveStreamActive} />}
+
       {/* FLOATING NEURAL CIRCUIT HUD (CANVAS OVERLAY) */}
-      <canvas 
-        ref={hudCanvasRef} 
-        className={`circuit-hud-canvas ${!showHUD ? 'hidden' : ''}`} 
+      <canvas
+        ref={hudCanvasRef}
+        className={`circuit-hud-canvas ${!showHUD ? 'hidden' : ''}`}
       />
 
       {/* BOTTOM TRANSPORT BAR */}
       <footer className="bottom-bar glass-panel">
         <div className="transport-controls">
-          <button 
+          <button
             className={`play-master-btn ${liveStreamActive ? 'playing' : ''}`}
             onClick={handleToggleListening}
             title={liveStreamActive ? "Pause Audio Listening" : "Start Audio Listening (Space)"}
@@ -419,11 +466,11 @@ export default function App() {
           </button>
           <div className="transport-track-summary">
             <span className="text-white font-bold text-sm">
-              {liveStreamActive ? 'SPOTIFY AUDIO STREAM ACTIVE' : 'AUDIO LISTENING PAUSED'}
+              {liveStreamActive ? 'AUDIO INPUT ACTIVE' : 'AUDIO LISTENING PAUSED'}
             </span>
             <span className="text-dim text-xs">
-              {bridgeConnected 
-                ? 'Fly brain moving controls in djay Pro in real-time' 
+              {bridgeConnected
+                ? transition?.phase === 'running' ? 'Assisted blend running · Esc to stop' : 'Connected · use Mix controls to start an assisted blend'
                 : 'Run "npm run bridge" in terminal to enable live djay Pro key control'}
             </span>
           </div>
@@ -431,7 +478,7 @@ export default function App() {
 
         {/* Real-time Reinforcement Learning Hotkey Buttons */}
         <div className="rl-feedback-actions">
-          <button 
+          <button
             className="feedback-btn reward"
             onClick={handleManualReward}
             title="Reward good transition / move (R key)"
@@ -439,7 +486,7 @@ export default function App() {
             <ThumbsUp size={16} />
             <span>REWARD [R]</span>
           </button>
-          <button 
+          <button
             className="feedback-btn penalty"
             onClick={handleManualPenalty}
             title="Penalize bad blend / trainwreck (X key)"

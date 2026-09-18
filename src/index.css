@@ -1,20 +1,22 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 :root {
-  --bg-primary: #060811;
-  --bg-secondary: #0d1322;
-  --panel-bg: rgba(13, 19, 34, 0.75);
-  --panel-border: rgba(0, 240, 255, 0.15);
-  --panel-border-glow: rgba(0, 240, 255, 0.25);
+  --bg-primary: #0d041a;
+  --bg-secondary: #1a082c;
+  --panel-bg: rgba(22, 10, 36, 0.75);
+  --panel-border: rgba(255, 183, 3, 0.18);
+  --panel-border-glow: rgba(255, 183, 3, 0.30);
   
   --cyan: #00f0ff;
   --cyan-glow: rgba(0, 240, 255, 0.4);
-  --pink: #ff0077;
+  --pink: #f72585;
   --green: #00ff88;
   --gold: #ffb703;
+  --gold-glow: rgba(255, 183, 3, 0.45);
+  --sunset: #fb5607;
   --purple: #9d4edd;
   
-  --text-main: #f1f5f9;
+  --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --text-dim: #64748b;
   
@@ -98,25 +100,25 @@ body, html {
   width: 38px;
   height: 38px;
   border-radius: 10px;
-  background: rgba(0, 240, 255, 0.12);
-  border: 1px solid var(--cyan);
+  background: rgba(255, 183, 3, 0.12);
+  border: 1px solid var(--gold);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 16px var(--cyan-glow);
+  box-shadow: 0 0 16px var(--gold-glow);
   animation: pulseLogo 3s infinite alternate;
 }
 
 @keyframes pulseLogo {
-  0% { transform: scale(1); box-shadow: 0 0 12px var(--cyan-glow); }
-  100% { transform: scale(1.05); box-shadow: 0 0 24px rgba(0, 240, 255, 0.7); }
+  0% { transform: scale(1); box-shadow: 0 0 12px var(--gold-glow); }
+  100% { transform: scale(1.05); box-shadow: 0 0 24px rgba(255, 183, 3, 0.7); }
 }
 
 .brand-title {
   font-size: 1.25rem;
   font-weight: 800;
   letter-spacing: 2px;
-  background: linear-gradient(135deg, #ffffff 30%, var(--cyan) 100%);
+  background: linear-gradient(135deg, #ffffff 20%, var(--gold) 65%, var(--pink) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin: 0;
@@ -1464,3 +1466,57 @@ body, html {
 }
 
 
+
+
+/* Keep the choreography and camera controls inside the header at every width. */
+.top-header {
+  height: auto;
+  min-height: 60px;
+  padding: 10px 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.header-actions .guide-btn { white-space: nowrap; }
+@media (max-width: 768px) {
+  .top-header { top: 8px; left: 8px; right: 8px; gap: 8px; }
+  .live-djay-bar { flex-wrap: wrap; }
+  .header-actions { width: 100%; }
+}
+
+.transition-panel {
+  position: absolute; right: 18px; top: 118px; z-index: 9;
+  width: 330px; max-height: calc(100vh - 240px); overflow-y: auto;
+  padding: 18px; border-radius: 14px; background: rgba(8, 14, 27, .96);
+  font-size: 12px; line-height: 1.5;
+}
+.transition-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.transition-heading strong { font-size: 16px; color: var(--cyan); }
+.transition-heading span, .transition-panel small { color: var(--text-muted); }
+.transition-panel p { margin: 10px 0; }
+.transition-options { display: flex; gap: 12px; margin: 12px 0; }
+.transition-options label { flex: 1; min-width: 0; }
+.transition-options input, .transition-options select {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 4px;
+  background: #101a2b; color: white; border: 1px solid #34445b; border-radius: 6px; padding: 7px;
+}
+.transition-panel button { padding: 8px 10px; border-radius: 6px; border: 1px solid #287080;
+  background: #102c36; color: #c7f8ff; cursor: pointer; font: inherit; }
+.transition-panel button:disabled { opacity: .4; cursor: not-allowed; }
+.transition-panel button:focus-visible, .transition-panel input:focus-visible, .transition-panel select:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.transition-decks { display: grid; gap: 6px; margin-bottom: 12px; }
+.transition-decks > div { display: flex; align-items: center; gap: 6px; }
+.transition-decks span { margin-right: auto; }
+.transition-confirm { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0; }
+.transition-confirm input { margin-top: 4px; }
+.transition-buttons { display: flex; gap: 8px; }
+.transition-panel .transition-stop { border-color: #954254; background: #3c1c29; color: #ffb4c5; }
+.transition-panel progress { width: 100%; height: 6px; accent-color: var(--cyan); margin-top: 16px; }
+@media (max-width: 1000px) {
+  .transition-panel { top: auto; bottom: 105px; max-height: 45vh; width: min(330px, calc(100vw - 72px)); }
+}

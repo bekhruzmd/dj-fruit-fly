@@ -1,7 +1,7 @@
 import type { BridgeAction, BridgeDisplayState } from '../bridge/protocol';
 export type Point = [number, number, number];
-export type Contact = 'crossfader' | 'filter1' | 'filter2' | 'cut';
-export interface BoothTargets { crossfader: Point; filter1: Point; filter2: Point; cut: Point; leftRest: Point; rightRest: Point }
+export type Contact = 'crossfader' | 'filter1' | 'filter2' | 'bass1' | 'bass2' | 'cut';
+export interface BoothTargets { crossfader: Point; filter1: Point; filter2: Point; bass1: Point; bass2: Point; cut: Point; leftRest: Point; rightRest: Point }
 interface Hand { point: Point; start: Point; contact: Contact | null; age: number; duration: number; returning: boolean }
 
 function easeOut(progress: number): number {
@@ -82,6 +82,8 @@ export class BoothActionAnimator {
       for (const index of [0, 1] as const) {
         if (display.filters[index].provenance === 'ax' && old.filters[index].provenance === 'ax' &&
           Math.abs(display.filters[index].value - old.filters[index].value) > .0001) this.reach(index, index === 0 ? 'filter1' : 'filter2');
+        if (display.bass[index].provenance === 'ax' && old.bass[index].provenance === 'ax' &&
+          Math.abs(display.bass[index].value - old.bass[index].value) > .0001) this.reach(index, index === 0 ? 'bass1' : 'bass2');
       }
       if (this.pending?.type === 'cut') this.reach(1, 'cut');
       if (this.pending?.type === 'crossfader-left') this.reach(0, 'crossfader');

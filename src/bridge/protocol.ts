@@ -8,7 +8,14 @@ export interface BridgeAction {
   id: string; commandId: string | null; type: 'crossfader-left' | 'crossfader-right' | 'cut' | 'control';
   at: number; status: 'dispatched' | 'failed' | 'rejected'; provenance: 'native-dispatch' | 'validation'; reason: string | null;
 }
+export const mixControls = ['crossfader', 'bass1', 'bass2', 'volume1', 'volume2', 'filter1', 'filter2', 'playing1', 'playing2', 'sync1', 'sync2', 'cue1', 'cue2'] as const;
+export interface TransitionState {
+  phase: 'idle' | 'preparing' | 'ready' | 'running' | 'settling' | 'complete' | 'stopped';
+  reason: string; source: number; bpm: number; progress: number; ready: boolean; blocker: string | null;
+  bass: [number | null, number | null]; writable: Record<typeof mixControls[number], boolean>;
+}
 export interface BridgeMessage {
+  transition?: TransitionState;
   version: 1; kind: 'snapshot' | 'action'; sessionId: string; sequence: number; sentAt: number;
   state: Record<Field, Reading<number | boolean>>; estimate: Estimate | null;
   availability: { djay: boolean; accessibility: boolean; dispatch: boolean };
@@ -20,6 +27,7 @@ export interface BridgeDisplayState {
   live: boolean; status: 'offline' | 'waiting' | 'stale' | 'unavailable' | 'live'; sessionId: string | null;
   crossfader: DisplayValue; filters: [DisplayValue, DisplayValue]; volumes: [DisplayValue, DisplayValue];
   playing: [boolean | null, boolean | null];
+  bass: [DisplayValue, DisplayValue];
 }
 const record = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -45,6 +53,14 @@ export function parseMessage(raw: string): BridgeMessage | null {
     }
     for (const key of ['djay', 'accessibility', 'dispatch']) if (typeof m.availability[key] !== 'boolean') return null;
     for (const key of ['crossfader', 'cut', 'filter']) if (typeof m.capabilities[key] !== 'boolean') return null;
+    if (m.transition !== undefined) {
+      const t = m.transition;
+      if (!record(t) || !['idle', 'preparing', 'ready', 'running', 'settling', 'complete', 'stopped'].includes(String(t.phase)) ||
+        typeof t.reason !== 'string' || !(t.source === 1 || t.source === 2) || !finite(t.bpm) || t.bpm < 60 || t.bpm > 180 ||
+        !unit(t.progress) || typeof t.ready !== 'boolean' || !(t.blocker === null || typeof t.blocker === 'string') ||
+        !Array.isArray(t.bass) || t.bass.length !== 2 || !t.bass.every(v => v === null || unit(v)) || !record(t.writable) ||
+        !mixControls.every(f => typeof (t.writable as Record<string, unknown>)[f] === 'boolean')) return null;
+    }
     if (m.estimate !== null && (!record(m.estimate) || !unit(m.estimate.value) || m.estimate.provenance !== 'dispatch-estimate' ||
       !finite(m.estimate.at) || m.estimate.at < 0 || m.estimate.at > m.sentAt)) return null;
     if (m.kind === 'snapshot' && m.action !== null) return null;
@@ -67,7 +83,7 @@ export function parseMessage(raw: string): BridgeMessage | null {
 export function idleDisplay(status: BridgeDisplayState['status'] = 'offline'): BridgeDisplayState {
   const neutral = (): DisplayValue => ({ value: .5, provenance: 'unknown' });
   return { live: false, status, sessionId: null, crossfader: neutral(), filters: [neutral(), neutral()],
-    volumes: [neutral(), neutral()], playing: [null, null] };
+    volumes: [neutral(), neutral()], bass: [neutral(), neutral()], playing: [null, null] };
 }
 // Neutral geometry is a placeholder and always tagged unknown. It provides a quiet disconnected
 // booth without claiming any native control position. Known playback is intentionally discarded.
@@ -111,6 +127,10 @@ export class BridgeStateStore {
   // additionally deduplicate retries carried by newer frames. Recovered stale sockets establish
   // a baseline without replaying a gesture, even if their first fresh message contains an action.
 
+  transition(now: number): TransitionState | null {
+    return this.connected && finite(now) && now - this.receivedAt <= STALE_MS ? this.message?.transition ?? null : null;
+  }
+
   display(now: number): BridgeDisplayState {
     if (!this.connected) return idleDisplay();
     const m = this.message;
@@ -130,7 +150,11 @@ export class BridgeStateStore {
     if (crossfader.provenance === 'unknown' && m.estimate && m.sentAt - m.estimate.at + elapsed <= STALE_MS) {
       crossfader.value = m.estimate.value; crossfader.provenance = 'dispatch-estimate';
     }
-    return { live: true, status: 'live', sessionId: m.sessionId, crossfader, filters: [value('filter1'), value('filter2')],
+    const bass = (index: number): DisplayValue => {
+      const v = m.transition?.bass[index];
+      return typeof v === 'number' ? { value: v, provenance: 'ax' } : { value: .5, provenance: 'unknown' };
+    };
+    return { bass: [bass(0), bass(1)], live: true, status: 'live', sessionId: m.sessionId, crossfader, filters: [value('filter1'), value('filter2')],
       volumes: [value('volume1'), value('volume2')], playing: [measured('playing1') as boolean | null, measured('playing2') as boolean | null] };
   }
   // One display projection supplies both booth geometry and HUD values. Fresh AX measurements

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Version 1 djay telemetry and PID-scoped keyboard dispatch on localhost:8766."""
+"""Local djay telemetry and explicitly started, verified assisted transitions."""
 import asyncio
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
-import ctypes as C
 import json
 import logging
 import math
@@ -14,23 +13,7 @@ import time
 import uuid
 
 from djay_accessibility import AXReader, FIELDS
-
-KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_F = 123, 124, 3
-cg = cf = None
-try:
-    cg = C.CDLL('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics')
-    cf = C.CDLL('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
-    for name, result, args in (
-        ('CGEventSourceCreate', C.c_void_p, [C.c_int]),
-        ('CGEventCreateKeyboardEvent', C.c_void_p, [C.c_void_p, C.c_uint16, C.c_bool]),
-        ('CGEventSetFlags', None, [C.c_void_p, C.c_uint64]),
-        ('CGEventPostToPid', None, [C.c_int32, C.c_void_p]),
-    ):
-        fn = getattr(cg, name); fn.restype = result; fn.argtypes = args
-    cf.CFRelease.argtypes = [C.c_void_p]; cf.CFRelease.restype = None
-except OSError:
-    cg = cf = None
-
+from djay_transition import AssistedTransition, ACTIVE
 
 def get_djay_pid():
     try:
@@ -50,85 +33,42 @@ def get_djay_pid():
 # A short subprocess timeout bounds process discovery. Renamed application bundles fail closed.
 
 
-def send_key_press(pid, key_code, with_ctrl=False):
-    if not cg or not pid or pid != get_djay_pid():
-        return False
-    source = cg.CGEventSourceCreate(1)
-    if not source:
-        return False
-    down = up = None
-    try:
-        down = cg.CGEventCreateKeyboardEvent(source, key_code, True)
-        up = cg.CGEventCreateKeyboardEvent(source, key_code, False)
-        if not down or not up:
-            return False
-        if with_ctrl:
-            cg.CGEventSetFlags(down, 0x00040000); cg.CGEventSetFlags(up, 0x00040000)
-        cg.CGEventPostToPid(pid, down)
-        cg.CGEventPostToPid(pid, up)
-        return True
-    except Exception:
-        return False
-    finally:
-        for ref in (down, up, source):
-            if ref:
-                cf.CFRelease(ref)
-# Events are prepared as a pair and posted only to a freshly verified djay PID. There is no
-# active-application fallback. A successful post is dispatch evidence, not proof djay changed.
-
-
 def unknown_state():
     return {key: {'value': None, 'provenance': 'unknown', 'at': None} for key in FIELDS}
 # Each control carries its own evidence instead of sharing a misleading global confirmed flag.
 # Null represents an unread value. Consumers must render a neutral unknown state for it.
 
 
-def validate_control(data):
-    if not isinstance(data, dict) or data.get('version') != 1 or data.get('kind') != 'control' or data.get('liveAudio') is not True:
-        raise ValueError('versioned live-audio control required')
-    if not isinstance(data.get('commandId'), str) or not 1 <= len(data['commandId']) <= 120:
-        raise ValueError('command id required')
-    values = []
-    for key in ('crossfader', 'filterCutoff'):
-        value = data.get(key)
-        if type(value) not in (int, float) or not math.isfinite(value):
-            raise ValueError('finite control values required')
-        values.append(max(0., min(1., value)))
-    if type(data.get('stutter')) is not bool:
-        raise ValueError('boolean stutter required')
-    return (*values, data['stutter'])
-# Validation rejects non-finite numbers and ambiguous truthy values before native work starts.
-# Unit controls are clamped at the boundary. The liveAudio assertion is supplied by the browser.
-
-
 class DjayController:
-    def __init__(self, reader=None, dispatch=None, pid_lookup=None, clock=None):
+    def __init__(self, reader=None, pid_lookup=None, clock=None):
         self.reader = reader if reader is not None else AXReader()
-        self.dispatch = dispatch or send_key_press
         self.pid_lookup = pid_lookup or get_djay_pid
         self.clock = clock or time.monotonic
         self.pid = None
         self.available = False
         self.accessibility = False
         self.state = unknown_state()
-        self.estimate = None
-        self.baseline = .5
-        self.last_stutter = False
-        self.last_action_time = -math.inf
+        self.transition = AssistedTransition(self.clock)
+        self.values = {}
+        self.writable = {}
     # Injectable native boundaries let tests exercise behavior without sending OS keystrokes.
     # The initial midpoint is only a dispatch baseline. It never becomes confirmed state.
 
     def poll(self):
         pid = self.pid_lookup()
         if pid != self.pid:
-            self.baseline = .5; self.estimate = None; self.last_stutter = False
+            if self.transition.phase in ACTIVE: self.transition.stop('Stopped: djay restarted.')
         self.pid = pid
         self.accessibility = self.reader.trusted()
         self.available = bool(pid and self.accessibility)
         try:
             values = self.reader.read(pid)
+            writable = self.reader.writable()
         except Exception:
-            values = {}
+            values, writable = {}, {}
+        self.values = values
+        self.writable = writable
+        self.transition.tick(values, self.writable, self.available, self.reader.move)
         now = self.clock() * 1000
         self.state = unknown_state()
         for key in FIELDS:
@@ -136,55 +76,32 @@ class DjayController:
             valid = type(value) is bool if key.startswith('playing') else type(value) in (int, float) and math.isfinite(value) and 0 <= value <= 1
             if valid:
                 self.state[key] = {'value': value, 'provenance': 'ax', 'at': now}
-        actual = self.state['crossfader']['value']
-        if actual is not None:
-            self.baseline = actual; self.estimate = None
-        if not self.available:
-            self.estimate = None
-    # Each poll replaces measurements, so a failed read cannot silently preserve confirmed data.
-    # Crossfader read-back reanchors future nudges. PID changes discard all dispatch assumptions.
-
-    def process_control(self, data):
-        crossfader, _unsupported_filter, stutter = validate_control(data)
-        now = self.clock()
-        events = []
-        pid = self.pid_lookup()
-        ready = bool(pid and pid == self.pid and self.reader.trusted())
-        diff = crossfader - self.baseline
-        intents = []
-        if abs(diff) > .03 and now - self.last_action_time >= .08:
-            intents.append(('crossfader-left' if diff < 0 else 'crossfader-right', KEY_LEFT_ARROW if diff < 0 else KEY_RIGHT_ARROW, True))
-        if stutter and not self.last_stutter:
-            intents.append(('cut', KEY_F, False))
-        for kind, key, ctrl in intents:
-            try:
-                success = ready and self.dispatch(pid, key, ctrl)
-            except Exception:
-                success = False
-            events.append({'id': str(uuid.uuid4()), 'commandId': data['commandId'], 'type': kind,
-                           'at': self.clock() * 1000, 'status': 'dispatched' if success else 'failed',
-                           'provenance': 'native-dispatch', 'reason': None if success else 'djay unavailable or dispatch failed'})
-            if ctrl:
-                self.last_action_time = now
-                if success:
-                    self.baseline = max(0., min(1., self.baseline + (-.05 if diff < 0 else .05)))
-                    self.estimate = {'value': self.baseline, 'provenance': 'dispatch-estimate', 'at': self.clock() * 1000}
-        self.last_stutter = stutter
-        return events
-    # Only preserved Ctrl-arrow and F shortcuts dispatch; filter requests deliberately do nothing.
-    # A successful nudge updates an explicitly heuristic 5% estimate, never AX measurements.
-    # Failed dispatches emit failure events and cannot animate a cut or move the estimate.
+    def process_transition(self, data):
+        if self.pid != self.pid_lookup() or not self.reader.trusted():
+            self.transition.stop('djay or Accessibility became unavailable.')
+            if data.get('operation') not in ('stop', 'heartbeat'):
+                raise ValueError('djay or Accessibility unavailable')
+        op = data.get('operation')
+        if op == 'press':
+            if self.transition.phase in ACTIVE: raise ValueError('Stop the transition before changing transport')
+            field = data.get('field')
+            if field not in ('playing1', 'playing2', 'sync1', 'sync2', 'cue1', 'cue2') or not self.writable.get(field):
+                raise ValueError('This deck control is unavailable')
+            self.reader.deadline = self.clock() + .15
+            if not self.reader.press(field): raise ValueError('djay did not accept the deck action')
+            self.transition.reason = 'Deck action sent. Check playback and sync in djay before starting.'
+            return
+        self.transition.command(data, self.values, self.writable, self.available)
 
     def payload(self):
-        now = self.clock() * 1000
-        estimate = self.estimate if self.estimate and now - self.estimate['at'] <= 1500 else None
-        return {'state': self.state, 'estimate': estimate,
-                'availability': {'djay': self.pid is not None, 'accessibility': self.accessibility, 'dispatch': self.available and cg is not None},
-                'capabilities': {'crossfader': True, 'cut': True, 'filter': False,
+        return {'state': self.state, 'estimate': None,
+                'transition': self.transition.snapshot(self.values, self.writable, self.available),
+                'diagnostics': {'controls': list(self.reader.cache), 'visited': self.reader.visited, 'pending': len(self.reader.queue), 'axErrors': self.reader.errors},
+                'availability': {'djay': self.pid is not None, 'accessibility': self.accessibility, 'dispatch': self.available and any(self.writable.values())},
+                'capabilities': {'crossfader': bool(self.writable.get('crossfader')), 'cut': False, 'filter': False,
                                  'read': {key: self.state[key]['provenance'] == 'ax' for key in FIELDS}}}
     # Snapshots expose per-control read capability separately from supported keyboard actions.
-    # Estimates expire after 1.5 seconds without a successful dispatch. No filter or transport
-    # estimate exists because no native action or observation supports one.
+    # Only measured AX values are reported. No heuristic keyboard estimates are emitted.
 
 
 class BridgeServer:
@@ -192,6 +109,7 @@ class BridgeServer:
         self.controller = controller or DjayController()
         self.session = str(uuid.uuid4()); self.sequence = 0
         self.clients = set(); self.seen = OrderedDict()
+        self.owner = None
         self.worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix='djay-native')
         self.lock = asyncio.Lock()
     # One worker bounds native concurrency and keeps AX references on a serialized boundary.
@@ -222,7 +140,7 @@ class BridgeServer:
             async with self.lock:
                 await loop.run_in_executor(self.worker, self.controller.poll)
                 await self.broadcast()
-            await asyncio.sleep(.2)
+            await asyncio.sleep(.08)
     # Native reads and PID discovery run off the event loop at a bounded polling cadence.
     # Polls never overlap or queue indefinitely. Control read-back latency depends on djay's AX tree.
 
@@ -236,21 +154,36 @@ class BridgeServer:
                 async with self.lock:
                     try:
                         data = json.loads(raw)
-                        validate_control(data)
+                        if not isinstance(data, dict) or data.get('version') != 1 or data.get('kind') != 'transition':
+                            raise ValueError('Use versioned assisted transition commands')
+                        if not isinstance(data.get('commandId'), str) or not 1 <= len(data['commandId']) <= 120:
+                            raise ValueError('Command ID required')
                         if data['commandId'] in self.seen:
                             continue
                         self.seen[data['commandId']] = True
                         if len(self.seen) > 512:
                             self.seen.popitem(last=False)
-                        actions = await loop.run_in_executor(self.worker, self.controller.process_control, data)
-                        for action in actions:
-                            await self.broadcast('action', action)
+                        operation = data.get('operation')
+                        if operation == 'heartbeat' and websocket is not self.owner:
+                            continue
+                        if operation in ('start', 'prepare') and self.controller.transition.phase in ACTIVE:
+                            raise ValueError('A transition is already active')
+                        if operation == 'press' and self.controller.transition.phase in ACTIVE:
+                            raise ValueError('Stop the current transition before changing decks')
+                        await loop.run_in_executor(self.worker, self.controller.process_transition, data)
+                        if operation in ('start', 'prepare'):
+                            self.owner = websocket
+                        await self.broadcast()
                     except (ValueError, TypeError, json.JSONDecodeError) as error:
                         await websocket.send(self.message('action', {'id': str(uuid.uuid4()), 'commandId': None,
                             'type': 'control', 'at': self.controller.clock() * 1000, 'status': 'rejected',
                             'provenance': 'validation', 'reason': str(error)}))
         finally:
-            self.clients.discard(websocket)
+            async with self.lock:
+                self.clients.discard(websocket)
+                if websocket is self.owner:
+                    await loop.run_in_executor(self.worker, self.controller.transition.stop, 'Stopped: controlling browser disconnected.')
+                    self.owner = None
     # Client commands are validated and deduplicated before entering the native worker.
     # Failed input gets a typed rejection without OS activity. Recent command IDs survive socket
     # reconnects; clients never resend buffered commands, and the bounded cache covers recent duplicates.
@@ -260,7 +193,9 @@ async def main():
     import websockets
     bridge = BridgeServer()
     try:
-        async with websockets.serve(bridge.handle_client, '127.0.0.1', 8766, max_size=4096, max_queue=16):
+        async with websockets.serve(bridge.handle_client, '127.0.0.1', 8766,
+                                    origins=['http://127.0.0.1:5173', 'http://localhost:5173'],
+                                    max_size=4096, max_queue=16):
             logging.info('djay bridge listening on ws://127.0.0.1:8766')
             await bridge.poll()
     finally:
@@ -277,6 +212,4 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         pass
 
-# Module summary: Browser motor intent enters a validated dispatcher; native AX feedback supplies
-# measured state downstream to the booth and HUD. Keyboard success is only a dispatch estimate.
-# No test or bridge startup triggers keys without an explicit live-audio control command.
+# No startup or connection initiates playback or mixer movement. Explicit commands own one transition.

@@ -1,16 +1,15 @@
-import { BridgeStateStore, type BridgeAction, type BridgeDisplayState } from './protocol';
+import { BridgeStateStore, parseMessage, type BridgeAction, type BridgeDisplayState } from './protocol';
 export interface BridgeControlPayload { crossfader: number; filterCutoff: number; stutter: boolean }
 export type ConnectionStatusListener = (connected: boolean) => void;
 
 export class DjayBridgeClient {
   private ws: WebSocket | null = null;
   private running = false;
+  public lastError: string | null = null;
   private connected = false;
   private statusListeners = new Set<ConnectionStatusListener>();
   private actionListeners = new Set<(action: BridgeAction) => void>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private lastSentTime = -Infinity;
-  private lastStutter = false;
   private commandSequence = 0;
   private readonly clientId = globalThis.crypto.randomUUID();
   private readonly store = new BridgeStateStore();
@@ -29,12 +28,13 @@ export class DjayBridgeClient {
       this.ws = socket;
       socket.onopen = () => {
         if (this.ws !== socket || !this.running) return;
-        this.lastSentTime = -Infinity; this.lastStutter = false;
         this.setConnected(true);
       };
       socket.onmessage = event => {
         if (this.ws !== socket || !this.running || typeof event.data !== 'string') return;
         const action = this.store.receive(event.data, performance.now());
+        const message = parseMessage(event.data);
+        if (message?.action?.status === 'rejected') this.lastError = message.action.reason;
         if (action) this.actionListeners.forEach(listener => listener(action));
       };
       socket.onclose = () => {
@@ -58,24 +58,26 @@ export class DjayBridgeClient {
   // Explicit teardown removes event handlers before closing the socket. This prevents onclose
   // from creating a reconnect timer after unmount. The display becomes idle immediately.
 
-  sendControl(payload: BridgeControlPayload, liveAudio = false): boolean {
+  transitionCommand(operation: 'prepare' | 'start' | 'stop' | 'heartbeat' | 'press', options: {
+    liveAudio?: boolean; source?: number; bpm?: number; confirmed?: boolean; field?: string;
+  } = {}): boolean {
     const socket = this.ws;
-    const now = performance.now();
-    if (!liveAudio || !this.connected || !socket || socket.readyState !== WebSocket.OPEN ||
-      !this.store.display(now).live || !Number.isFinite(payload.crossfader) || !Number.isFinite(payload.filterCutoff) ||
-      typeof payload.stutter !== 'boolean' || socket.bufferedAmount > 4096) return false;
-    if (payload.stutter === this.lastStutter && now - this.lastSentTime < 40) return false;
+    if (!socket || socket.readyState !== WebSocket.OPEN || socket.bufferedAmount > 4096) {
+      if (operation !== 'heartbeat') this.lastError = 'Bridge unavailable. Start npm run bridge.';
+      return false;
+    }
+    if (operation !== 'heartbeat') this.lastError = null;
     try {
-      socket.send(JSON.stringify({ version: 1, kind: 'control', commandId: `${this.clientId}:${++this.commandSequence}`,
-        liveAudio: true, crossfader: Math.max(0, Math.min(1, payload.crossfader)),
-        filterCutoff: Math.max(0, Math.min(1, payload.filterCutoff)), stutter: payload.stutter }));
-      this.lastSentTime = now; this.lastStutter = payload.stutter;
+      socket.send(JSON.stringify({ version: 1, kind: 'transition', operation,
+        commandId: `${this.clientId}:${++this.commandSequence}`, ...options }));
       return true;
-    } catch { return false; }
+    } catch {
+      this.lastError = 'Could not send the command. Check the bridge connection.';
+      return false;
+    }
   }
-  // Live audio and fresh telemetry gate all outgoing intent. Bounded buffered bytes and a 25Hz
-  // throttle discard obsolete motor output instead of queueing it. Stutter edges bypass the
-  // throttle, but successful sending still does not generate a local action animation.
+
+  getTransitionState(now = performance.now()) { return this.store.transition(now); }
 
   getDisplayState(now = performance.now()): BridgeDisplayState { return this.store.display(now); }
   // Rendering polls freshness even when the server is silent. The store owns all provenance.

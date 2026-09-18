@@ -1,4 +1,4 @@
-"""Read a bounded, djay-only AX tree; never perform accessibility actions."""
+"""Bounded djay-only AX reads and explicitly requested, verified mixer actions."""
 import ctypes as C
 import math
 import re
@@ -6,26 +6,33 @@ import sys
 import time
 
 FIELDS = ('crossfader', 'filter1', 'filter2', 'volume1', 'volume2', 'playing1', 'playing2')
+MIX_FIELDS = ('bass1', 'bass2', 'sync1', 'sync2', 'cue1', 'cue2')
+ALL_FIELDS = FIELDS + MIX_FIELDS
 
 
 def identify_control(role, description):
     if role == 'AXSlider':
         if description.strip().lower() == 'crossfader':
             return 'crossfader'
-        match = re.fullmatch(r'(Filter|Line volume), Deck ([12])', description.strip(), re.I)
+        match = re.fullmatch(r'(Filter|Line volume|Low EQ), Deck ([12])', description.strip(), re.I)
         if match:
-            return ('filter' if match[1].lower() == 'filter' else 'volume') + match[2]
+            return {'filter': 'filter', 'line volume': 'volume', 'low eq': 'bass'}[match[1].lower()] + match[2]
     if role in ('AXButton', 'AXCheckBox'):
         match = re.fullmatch(r'Play / Pause, Deck ([12])', description.strip(), re.I)
         if match:
             return 'playing' + match[1]
+        match = re.fullmatch(r'(Sync|CUE), Deck ([12])', description.strip(), re.I)
+        if match:
+            return match[1].lower() + match[2]
     return None
 # This matches only known djay control descriptions and roles. Exact scope prevents unrelated
 # menu items from masquerading as mixer controls. Localized or redesigned UIs remain unknown.
 
 
 def normalized_value(field, value, minimum=None, maximum=None):
-    if field.startswith('playing'):
+    if field.startswith(('playing', 'sync', 'cue')):
+        if value in ('Active', 'On'): return True
+        if value in ('Inactive', 'Off'): return False
         # A button's *description* is never evidence of transport state.
         return bool(value) if type(value) in (bool, int, float) and value in (0, 1) else None
     if isinstance(value, str):
@@ -52,12 +59,18 @@ class AXReader:
         self.next_scan = 0.
         self.deadline = 0.
         self.ax = self.cf = None
+        self.errors = {}
+        self.visited = 0
+        self.samples = []
+        self.control_enabled = {}
         if sys.platform != 'darwin':
             return
         try:
             self.ax = C.CDLL('/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices')
             self.cf = C.CDLL('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
             signatures = {
+                'AXUIElementPerformAction': (C.c_int, [C.c_void_p, C.c_void_p]),
+                'AXUIElementCopyActionNames': (C.c_int, [C.c_void_p, C.POINTER(C.c_void_p)]),
                 'AXIsProcessTrusted': (C.c_bool, []),
                 'AXUIElementCreateApplication': (C.c_void_p, [C.c_int]),
                 'AXUIElementSetMessagingTimeout': (C.c_int, [C.c_void_p, C.c_float]),
@@ -67,6 +80,7 @@ class AXReader:
                 fn = getattr(self.ax, name); fn.restype = result; fn.argtypes = args
             signatures = {
                 'CFRelease': (None, [C.c_void_p]), 'CFRetain': (C.c_void_p, [C.c_void_p]),
+                'CFHash': (C.c_ulong, [C.c_void_p]),
                 'CFGetTypeID': (C.c_ulong, [C.c_void_p]),
                 'CFStringCreateWithCString': (C.c_void_p, [C.c_void_p, C.c_char_p, C.c_uint]),
                 'CFStringGetCString': (C.c_bool, [C.c_void_p, C.c_void_p, C.c_long, C.c_uint]),
@@ -104,6 +118,7 @@ class AXReader:
         out = C.c_void_p()
         try:
             error = self.ax.AXUIElementCopyAttributeValue(node, key, C.byref(out))
+            if error: self.errors[str(error)] = self.errors.get(str(error), 0) + 1
             return out.value if error == 0 else None
         finally:
             self.cf.CFRelease(key)
@@ -131,7 +146,7 @@ class AXReader:
     # intentionally ignored. The copy is released even when conversion cannot represent it.
 
     def read(self, pid):
-        result = {field: None for field in FIELDS}
+        result = {field: None for field in ALL_FIELDS}
         if pid != self.pid:
             self.close()
         if not pid or not self.trusted():
@@ -145,10 +160,14 @@ class AXReader:
                 return result
             self.ax.AXUIElementSetMessagingTimeout(self.app, .025)
         # Cached controls get first access to the budget, so discovery cannot starve feedback.
+        # djay's custom-rendered controls do not populate AXEnabled reliably (confirmed live:
+        # every matched control reads AXEnabled=false even while the user is moving it by hand),
+        # so cache membership is never gated on it. Staleness is instead corrected by the 5s
+        # rescan below, which overwrites any field whose matching node has changed.
         for field, node in list(self.cache.items()):
             value = self._value(node, 'AXValue')
             lo = hi = None
-            if not field.startswith('playing') and type(value) in (float, int):
+            if not field.startswith(('playing', 'sync', 'cue')) and type(value) in (float, int):
                 lo = self._value(node, 'AXMinValue'); hi = self._value(node, 'AXMaxValue')
             result[field] = normalized_value(field, value, lo, hi)
         if not self.queue and time.monotonic() >= self.next_scan:
@@ -158,15 +177,25 @@ class AXReader:
         while self.queue and time.monotonic() < self.deadline:
             node = self.queue.pop(0)
             try:
-                identity = node
+                identity = self.cf.CFHash(node)
+                self.visited += 1
                 if identity in self.seen or len(self.seen) >= 6000:
                     continue
                 self.seen.add(identity)
                 self.ax.AXUIElementSetMessagingTimeout(node, .025)
                 role = self._value(node, 'AXRole')
                 if role in ('AXSlider', 'AXButton', 'AXCheckBox'):
-                    field = identify_control(role, self._value(node, 'AXDescription') or '')
+                    description = self._value(node, 'AXDescription') or ''
+                    if role == 'AXSlider' and len(self.samples) < 20: self.samples.append((description, self._value(node, 'AXEnabled')))
+                    field = identify_control(role, description)
                     if field:
+                        # AXEnabled is recorded for observability only (see check-djay-bridge.py
+                        # --native) and never gates caching: djay reports it false for every
+                        # control regardless of real interactivity. Real writability is decided
+                        # by writable() (declared AXIncrement/AXDecrement/AXPress support) and,
+                        # for an actual write, by move()'s own readback-confirmed loop.
+                        enabled = self._value(node, 'AXEnabled')
+                        self.control_enabled.setdefault(field, {'enabled': 0, 'disabled': 0, 'unknown': 0})['enabled' if enabled is True else 'disabled' if enabled is False else 'unknown'] += 1
                         if field in self.cache:
                             self.cf.CFRelease(self.cache[field])
                         self.cache[field] = self.cf.CFRetain(node)
@@ -187,6 +216,61 @@ class AXReader:
     # A 350ms budget and 25ms AX timeout are initial responsiveness limits, not measured latency.
     # Layout changes can delay discovery; absent or unreadable controls are never carried forward.
 
-# Module summary: This is a read-only, dependency-free adapter for the native accessibility boundary.
-# Values come from AXValue, with exact descriptions identifying their controls. It is designed
-# for one serialized background worker; it neither guesses playback nor manipulates the OS UI.
+    def _actions(self, node):
+        out = C.c_void_p()
+        if self.ax.AXUIElementCopyActionNames(node, C.byref(out)) != 0 or not out.value:
+            return set()
+        try:
+            names = set()
+            for i in range(self.cf.CFArrayGetCount(out.value)):
+                ref = self.cf.CFArrayGetValueAtIndex(out.value, i)
+                buffer = C.create_string_buffer(128)
+                if self.cf.CFStringGetCString(ref, buffer, len(buffer), 0x08000100):
+                    names.add(buffer.value.decode())
+            return names
+        finally:
+            self.cf.CFRelease(out.value)
+
+    def writable(self):
+        if not self.trusted(): return {}
+        result = {}
+        for field, node in self.cache.items():
+            actions = self._actions(node)
+            result[field] = ('AXPress' in actions if field.startswith(('playing', 'sync', 'cue'))
+                             else {'AXIncrement', 'AXDecrement'} <= actions)
+        return result
+
+    def press(self, field):
+        if field not in ('playing1', 'playing2', 'sync1', 'sync2', 'cue1', 'cue2'):
+            return False
+        node = self.cache.get(field)
+        if not node or not self.trusted(): return False
+        return self._perform(node, 'AXPress')
+
+    def _perform(self, node, action):
+        # No AXEnabled gate here: djay never reports it true (see read()). The action's own
+        # AXUIElementPerformAction return code is the failure signal, and move()'s readback
+        # loop is the ground-truth confirmation that a dispatched action actually took effect.
+        ref = self.cf.CFStringCreateWithCString(None, action.encode(), 0x08000100)
+        try:
+            return self.ax.AXUIElementPerformAction(node, ref) == 0
+        finally:
+            self.cf.CFRelease(ref)
+
+    def move(self, field, target):
+        """Small bounded moves; AXValue readback, never dispatch, proves progress."""
+        if field not in ('crossfader', 'bass1', 'bass2', 'volume1', 'volume2', 'filter1', 'filter2'):
+            return None
+        node = self.cache.get(field)
+        if not node or not self.trusted() or not math.isfinite(target) or not 0 <= target <= 1:
+            return None
+        self.deadline = time.monotonic() + .12
+        for _ in range(8):
+            raw = self._value(node, 'AXValue')
+            lo = self._value(node, 'AXMinValue') if type(raw) in (float, int) else None
+            hi = self._value(node, 'AXMaxValue') if type(raw) in (float, int) else None
+            value = normalized_value(field, raw, lo, hi)
+            if value is None or abs(value - target) <= .011: return value
+            if time.monotonic() >= self.deadline: return value
+            if not self._perform(node, 'AXIncrement' if target > value else 'AXDecrement'): return None
+        return normalized_value(field, self._value(node, 'AXValue'), lo, hi)

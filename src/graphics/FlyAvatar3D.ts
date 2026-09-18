@@ -16,6 +16,11 @@ export class FlyAvatar3D {
   // Fly avatar
   public flyRoot: THREE.Group;
   private wingPivots: THREE.Group[] = [];
+  private headPivot = new THREE.Group();
+  private legPivots: THREE.Group[] = [];
+  private danceTime = 0;
+  public demoMoves = true;
+  private handTips = [new THREE.Vector3(), new THREE.Vector3()];
   private dopamineLight: THREE.PointLight;
   private flyModelLoaded = false;
   private flyHeadphones: THREE.Group;
@@ -32,6 +37,7 @@ export class FlyAvatar3D {
   private crossfaderKnob: THREE.Mesh;
   private filterKnob: THREE.Mesh;
   private filterKnob2 = new THREE.Mesh();
+  private bassKnobs: THREE.Mesh[] = [];
   private cutButton = new THREE.Mesh();
   private animator = new BoothActionAnimator();
   private reducedMotion = false;
@@ -45,6 +51,8 @@ export class FlyAvatar3D {
 
   // Club Audio Stage: Subwoofers & Lighting
   private speakerCones: THREE.Mesh[] = [];
+  private speakerRings: THREE.Mesh[] = [];
+  private subGlows: THREE.Mesh[] = [];
   private laserBeams: THREE.Mesh[] = [];
   private stageLights: THREE.PointLight[] = [];
   private dopamineStrobe: THREE.PointLight;
@@ -82,7 +90,7 @@ export class FlyAvatar3D {
     this.reducedMotion = this.motionQuery.matches;
     this.motionQuery.addEventListener('change', this.motionChanged);
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x060811, 0.10);
+    this.scene.fog = new THREE.FogExp2(0x1a0b2e, 0.055);
 
     const width = canvas.clientWidth || window.innerWidth;
     const height = canvas.clientHeight || window.innerHeight;
@@ -90,11 +98,11 @@ export class FlyAvatar3D {
     this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
     this.updateCameraPosition();
 
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'default' });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.35;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+    this.renderer.toneMapping = THREE.LinearToneMapping;
+    this.renderer.toneMappingExposure = 1.25;
 
     this.flyRoot         = new THREE.Group();
     this.turntableDesk   = new THREE.Group();
@@ -110,11 +118,12 @@ export class FlyAvatar3D {
     this.leftLimb        = new THREE.Group();
     this.rightLimb       = new THREE.Group();
     this.rewardRing      = new THREE.Mesh();
-    this.dopamineStrobe  = new THREE.PointLight(0x00f0ff, 0, 10);
-    this.dopamineLight   = new THREE.PointLight(0x00ff88, 0, 6);
+    this.dopamineStrobe  = new THREE.PointLight(0xffb703, 0, 10);
+    this.dopamineLight   = new THREE.PointLight(0xffb703, 0, 6);
     this.particleSystem  = new THREE.Points();
 
     this.scene.add(this.flyRoot);
+    this.buildIbizaSkyBackdrop();
     this.setupLighting();
     this.buildDJStage();
     this.buildSoundSystem();
@@ -127,28 +136,132 @@ export class FlyAvatar3D {
     this.setupInteractivity(canvas);
   }
 
+  // ─── Ibiza Sunset Sky & Atmospheric Backdrop ─────────────────────────────
+
+  private buildIbizaSkyBackdrop(): void {
+    // 1. Procedural Ibiza Sunset Gradient Background Texture
+    const bgCanvas = document.createElement('canvas');
+    bgCanvas.width = 512;
+    bgCanvas.height = 512;
+    const ctx = bgCanvas.getContext('2d')!;
+
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, 512);
+    skyGrad.addColorStop(0.00, '#0d041a'); // Deep twilight indigo
+    skyGrad.addColorStop(0.22, '#23073b'); // Deep royal purple
+    skyGrad.addColorStop(0.42, '#5e104b'); // Sunset orchid magenta
+    skyGrad.addColorStop(0.60, '#b83220'); // Fiery sunset crimson
+    skyGrad.addColorStop(0.74, '#e66b12'); // Glowing orange
+    skyGrad.addColorStop(0.85, '#ffad14'); // Golden amber
+    skyGrad.addColorStop(0.92, '#ffe082'); // Horizon glow
+    skyGrad.addColorStop(1.00, '#100722'); // Horizon sea base
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, 512, 512);
+
+    // Warm glowing Ibiza sun near the sea horizon
+    const sunGrad = ctx.createRadialGradient(256, 435, 12, 256, 435, 130);
+    sunGrad.addColorStop(0, 'rgba(255, 245, 200, 0.85)');
+    sunGrad.addColorStop(0.35, 'rgba(255, 160, 40, 0.45)');
+    sunGrad.addColorStop(0.70, 'rgba(230, 60, 70, 0.20)');
+    sunGrad.addColorStop(1, 'rgba(20, 5, 30, 0)');
+    ctx.fillStyle = sunGrad;
+    ctx.beginPath();
+    ctx.arc(256, 435, 130, 0, Math.PI * 2);
+    ctx.fill();
+
+    const bgTexture = new THREE.CanvasTexture(bgCanvas);
+    this.scene.background = bgTexture;
+
+    // 2. Curved distant panoramic backdrop with Ibiza palm silhouettes & festival glow
+    const pCanvas = document.createElement('canvas');
+    pCanvas.width = 1024;
+    pCanvas.height = 256;
+    const pCtx = pCanvas.getContext('2d')!;
+    pCtx.clearRect(0, 0, 1024, 256);
+
+    // Distant coastal hills silhouette
+    pCtx.fillStyle = '#0f051c';
+    pCtx.beginPath();
+    pCtx.moveTo(0, 256);
+    pCtx.lineTo(0, 185);
+    pCtx.bezierCurveTo(180, 160, 320, 200, 512, 175);
+    pCtx.bezierCurveTo(700, 150, 850, 190, 1024, 180);
+    pCtx.lineTo(1024, 256);
+    pCtx.closePath();
+    pCtx.fill();
+
+    // Silhouette palm trees along horizon
+    const drawPalm = (px: number, py: number, scale: number) => {
+      pCtx.save();
+      pCtx.translate(px, py);
+      pCtx.scale(scale, scale);
+      pCtx.strokeStyle = '#0a0314';
+      pCtx.lineWidth = 3.5;
+      pCtx.beginPath();
+      pCtx.moveTo(0, 0);
+      pCtx.quadraticCurveTo(8, -25, 4, -55);
+      pCtx.stroke();
+      // Palm fronds
+      pCtx.lineWidth = 2;
+      const fronds = [-0.8, -0.4, 0, 0.4, 0.8, -1.1, 1.1];
+      for (const a of fronds) {
+        pCtx.beginPath();
+        pCtx.moveTo(4, -55);
+        pCtx.quadraticCurveTo(4 + a * 35, -55 - 12, 4 + a * 40, -40);
+        pCtx.stroke();
+      }
+      pCtx.restore();
+    };
+
+    const palms = [120, 160, 380, 420, 680, 720, 910, 950];
+    for (const px of palms) {
+      drawPalm(px, 210, 0.8 + Math.random() * 0.4);
+    }
+
+    // Warm festival stage ambient lighting dots
+    for (let i = 0; i < 28; i++) {
+      const lx = 40 + i * 34;
+      const ly = 195 + Math.sin(i * 0.8) * 8;
+      pCtx.fillStyle = i % 2 === 0 ? 'rgba(255, 183, 3, 0.6)' : 'rgba(247, 37, 133, 0.6)';
+      pCtx.beginPath();
+      pCtx.arc(lx, ly, 2.5, 0, Math.PI * 2);
+      pCtx.fill();
+    }
+
+    const pTex = new THREE.CanvasTexture(pCanvas);
+    const backdropGeo = new THREE.CylinderGeometry(28, 28, 14, 24, 1, true, -Math.PI * 0.75, Math.PI * 1.5);
+    const backdropMat = new THREE.MeshBasicMaterial({
+      map: pTex,
+      transparent: true,
+      side: THREE.BackSide,
+      depthWrite: false,
+    });
+    const backdropMesh = new THREE.Mesh(backdropGeo, backdropMat);
+    backdropMesh.position.set(0, 5.0, 0);
+    this.scene.add(backdropMesh);
+  }
+
   // ─── Lighting ───────────────────────────────────────────────────────────────
 
   private setupLighting(): void {
-    this.scene.add(new THREE.AmbientLight(0x0a1024, 2.2));
+    this.scene.add(new THREE.AmbientLight(0x261436, 2.0));
 
-    const key = new THREE.DirectionalLight(0x00e5ff, 2.8);
-    key.position.set(3.5, 6, 4.5);
+    const key = new THREE.DirectionalLight(0xffb044, 2.8); // Golden sunset key light
+    key.position.set(3.5, 5.5, 4.5);
     this.scene.add(key);
 
-    const fill = new THREE.DirectionalLight(0xff0077, 2.2);
+    const fill = new THREE.DirectionalLight(0xd946ef, 2.0); // Sunset magenta fill
     fill.position.set(-3.5, 3.5, -2.5);
     this.scene.add(fill);
 
-    const backRim = new THREE.DirectionalLight(0x9d4edd, 2.5);
+    const backRim = new THREE.DirectionalLight(0xf43f5e, 2.2); // Warm rose-sunset rim
     backRim.position.set(0, 4, -4);
     this.scene.add(backRim);
 
-    // Dynamic colored spotlights
-    const spotColors = [0x00f0ff, 0xff0077, 0x00ff88, 0xffb703];
-    for (let i = 0; i < 4; i++) {
-      const pl = new THREE.PointLight(spotColors[i], 2.0, 7.5);
-      pl.position.set((i - 1.5) * 2.2, 3.2, 0.5);
+    // 2 Optimized dynamic spotlights (amber & sunset rose)
+    const spotColors = [0xffaa00, 0xf43f5e];
+    for (let i = 0; i < 2; i++) {
+      const pl = new THREE.PointLight(spotColors[i], 2.2, 8.0);
+      pl.position.set(i === 0 ? -1.8 : 1.8, 3.2, 0.5);
       this.stageLights.push(pl);
       this.scene.add(pl);
     }
@@ -160,33 +273,33 @@ export class FlyAvatar3D {
   // ─── DJ Stage & Equipment ───────────────────────────────────────────────────
 
   private buildDJStage(): void {
-    // Reflective club floor
+    // Reflective club floor (twilight obsidian purple)
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(24, 24, 32, 32),
-      new THREE.MeshStandardMaterial({ color: 0x050811, roughness: 0.1, metalness: 0.9 })
+      new THREE.PlaneGeometry(24, 24, 16, 16),
+      new THREE.MeshStandardMaterial({ color: 0x0c0816, roughness: 0.15, metalness: 0.85 })
     );
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -0.7;
     this.scene.add(floor);
 
-    const grid = new THREE.GridHelper(24, 48, 0x00f0ff, 0x111c33);
+    const grid = new THREE.GridHelper(24, 36, 0xff9e00, 0x3b184c);
     grid.position.y = -0.69;
     this.scene.add(grid);
 
-    // DJ Booth Desk
+    // DJ Booth Desk (Pro anodized gunmetal with warm Ibiza amber trim)
     this.turntableDesk = new THREE.Group();
     this.turntableDesk.position.set(0, -0.35, 0.85);
 
     const desk = new THREE.Mesh(
       new THREE.BoxGeometry(2.6, 0.68, 1.0),
-      new THREE.MeshStandardMaterial({ color: 0x0d1322, roughness: 0.2, metalness: 0.95 })
+      new THREE.MeshStandardMaterial({ color: 0x141824, roughness: 0.25, metalness: 0.90 })
     );
     this.turntableDesk.add(desk);
 
-    // Neon trim lines
+    // Warm amber top trim
     const topEdge = new THREE.Mesh(
       new THREE.BoxGeometry(2.64, 0.03, 1.04),
-      new THREE.MeshBasicMaterial({ color: 0x00f0ff })
+      new THREE.MeshBasicMaterial({ color: 0xffb703 })
     );
     topEdge.position.y = 0.34;
     this.turntableDesk.add(topEdge);
@@ -194,17 +307,19 @@ export class FlyAvatar3D {
     // Front illuminated LED matrix facade
     const frontFacade = new THREE.Mesh(
       new THREE.BoxGeometry(2.62, 0.67, 0.02),
-      new THREE.MeshStandardMaterial({ color: 0x090d1a, metalness: 0.8, roughness: 0.3 })
+      new THREE.MeshStandardMaterial({ color: 0x0c0f18, metalness: 0.85, roughness: 0.3 })
     );
     frontFacade.position.set(0, 0, 0.51);
     this.turntableDesk.add(frontFacade);
 
-    // Front facade spectrum bars
+    // Front facade spectrum bars in Ibiza sunset gradient:
+    // Gold -> Sunset Orange -> Coral -> Orchid Magenta
     const nDisplayBars = 16;
     for (let i = 0; i < nDisplayBars; i++) {
+      const barColor = i < 4 ? 0xffc300 : i < 8 ? 0xff5400 : i < 12 ? 0xff0054 : 0x9e0059;
       const barMesh = new THREE.Mesh(
         new THREE.BoxGeometry(0.11, 0.02, 0.015),
-        new THREE.MeshBasicMaterial({ color: i < 8 ? 0x00f0ff : 0xff0077 })
+        new THREE.MeshBasicMaterial({ color: barColor })
       );
       barMesh.position.set(-1.0 + i * 0.133, -0.05, 0.53);
       this.boothDisplayBars.push(barMesh);
@@ -213,13 +328,13 @@ export class FlyAvatar3D {
 
     // ── Decks (Pioneer CDJ style with illuminated jog rings) ──
     const deckBodyGeo = new THREE.BoxGeometry(0.72, 0.08, 0.78);
-    const deckBodyMat = new THREE.MeshStandardMaterial({ color: 0x161e2e, roughness: 0.3, metalness: 0.85 });
+    const deckBodyMat = new THREE.MeshStandardMaterial({ color: 0x181c26, roughness: 0.35, metalness: 0.85 });
 
-    // Deck 1 (Left)
+    // Deck 1 (Left - Warm Gold Jog Ring)
     const deck1 = new THREE.Mesh(deckBodyGeo, deckBodyMat);
     deck1.position.set(-0.78, 0.38, 0);
     const platterRingGeo = new THREE.RingGeometry(0.28, 0.30, 32);
-    const platterRingMat1 = new THREE.MeshBasicMaterial({ color: 0x00f0ff, side: THREE.DoubleSide });
+    const platterRingMat1 = new THREE.MeshBasicMaterial({ color: 0xffb703, side: THREE.DoubleSide });
 
     const ringMesh1 = new THREE.Mesh(platterRingGeo, platterRingMat1);
     ringMesh1.rotation.x = -Math.PI / 2;
@@ -228,14 +343,14 @@ export class FlyAvatar3D {
 
     this.leftVinyl = new THREE.Mesh(
       new THREE.CylinderGeometry(0.26, 0.26, 0.03, 32),
-      new THREE.MeshStandardMaterial({ color: 0x05070d, metalness: 0.95, roughness: 0.15 })
+      new THREE.MeshStandardMaterial({ color: 0x080a12, metalness: 0.95, roughness: 0.15 })
     );
     this.leftVinyl.position.y = 0.05;
 
     // Glowing position needle marker
     this.leftNeedleMarker = new THREE.Mesh(
       new THREE.BoxGeometry(0.04, 0.01, 0.08),
-      new THREE.MeshBasicMaterial({ color: 0x00f0ff })
+      new THREE.MeshBasicMaterial({ color: 0xffd166 })
     );
     this.leftNeedleMarker.position.set(0, 0.02, 0.18);
     this.leftVinyl.add(this.leftNeedleMarker);
@@ -243,10 +358,10 @@ export class FlyAvatar3D {
     deck1.add(this.leftVinyl);
     this.turntableDesk.add(deck1);
 
-    // Deck 2 (Right)
+    // Deck 2 (Right - Sunset Rose Jog Ring)
     const deck2 = new THREE.Mesh(deckBodyGeo, deckBodyMat);
     deck2.position.set(0.78, 0.38, 0);
-    const platterRingMat2 = new THREE.MeshBasicMaterial({ color: 0xff0077, side: THREE.DoubleSide });
+    const platterRingMat2 = new THREE.MeshBasicMaterial({ color: 0xf72585, side: THREE.DoubleSide });
 
     const ringMesh2 = new THREE.Mesh(platterRingGeo, platterRingMat2);
     ringMesh2.rotation.x = -Math.PI / 2;
@@ -255,13 +370,13 @@ export class FlyAvatar3D {
 
     this.rightVinyl = new THREE.Mesh(
       new THREE.CylinderGeometry(0.26, 0.26, 0.03, 32),
-      new THREE.MeshStandardMaterial({ color: 0x05070d, metalness: 0.95, roughness: 0.15 })
+      new THREE.MeshStandardMaterial({ color: 0x080a12, metalness: 0.95, roughness: 0.15 })
     );
     this.rightVinyl.position.y = 0.05;
 
     this.rightNeedleMarker = new THREE.Mesh(
       new THREE.BoxGeometry(0.04, 0.01, 0.08),
-      new THREE.MeshBasicMaterial({ color: 0xff0077 })
+      new THREE.MeshBasicMaterial({ color: 0xf72585 })
     );
     this.rightNeedleMarker.position.set(0, 0.02, 0.18);
     this.rightVinyl.add(this.rightNeedleMarker);
@@ -272,7 +387,7 @@ export class FlyAvatar3D {
     // ── Mixer Unit ──
     const mixer = new THREE.Mesh(
       new THREE.BoxGeometry(0.58, 0.09, 0.82),
-      new THREE.MeshStandardMaterial({ color: 0x111624, roughness: 0.3, metalness: 0.9 })
+      new THREE.MeshStandardMaterial({ color: 0x141824, roughness: 0.3, metalness: 0.9 })
     );
     mixer.position.set(0, 0.38, 0);
     this.turntableDesk.add(mixer);
@@ -280,21 +395,21 @@ export class FlyAvatar3D {
     // Crossfader
     const cfSlot = new THREE.Mesh(
       new THREE.BoxGeometry(0.24, 0.008, 0.025),
-      new THREE.MeshBasicMaterial({ color: 0x05070d })
+      new THREE.MeshBasicMaterial({ color: 0x080a12 })
     );
     cfSlot.position.set(0, 0.43, 0.24);
     this.turntableDesk.add(cfSlot);
 
     this.crossfaderKnob = new THREE.Mesh(
       new THREE.BoxGeometry(0.042, 0.032, 0.025),
-      new THREE.MeshStandardMaterial({ color: 0x00f0ff, metalness: 0.9, roughness: 0.1, emissive: 0x00a8ff, emissiveIntensity: 0.6 })
+      new THREE.MeshStandardMaterial({ color: 0xffb703, metalness: 0.9, roughness: 0.1, emissive: 0xd97706, emissiveIntensity: 0.5 })
     );
     this.crossfaderKnob.position.set(0, 0.44, 0.24);
     this.turntableDesk.add(this.crossfaderKnob);
 
     // Channel 1 and 2 Volume Faders
     const faderGeo = new THREE.BoxGeometry(0.025, 0.025, 0.035);
-    const faderMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.8, roughness: 0.2 });
+    const faderMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, metalness: 0.8, roughness: 0.2 });
 
     this.ch1Fader = new THREE.Mesh(faderGeo, faderMat);
     this.ch1Fader.position.set(-0.10, 0.435, 0.08);
@@ -320,6 +435,13 @@ export class FlyAvatar3D {
       const mark = new THREE.Mesh(new THREE.BoxGeometry(.007, .003, .024), new THREE.MeshBasicMaterial({ color: 0xffffff }));
       mark.position.set(0, .018, -.012); knob.add(mark);
     }
+    for (const side of [-1, 1]) {
+      const knob = this.filterKnob.clone();
+      knob.material = new THREE.MeshStandardMaterial({ color: 0xffb703, emissive: 0xffb703, emissiveIntensity: .3 });
+      knob.position.set(side * .17, .435, -.24);
+      this.turntableDesk.add(knob);
+      this.bassKnobs.push(knob);
+    }
     this.cutButton = new THREE.Mesh(new THREE.BoxGeometry(.07, .02, .05),
       new THREE.MeshStandardMaterial({ color: 0xffb703, emissive: 0xffb703, emissiveIntensity: .15 }));
     this.cutButton.position.set(.19, .44, .20);
@@ -343,33 +465,84 @@ export class FlyAvatar3D {
   // ─── Sound System Subwoofers ────────────────────────────────────────────────
 
   private buildSoundSystem(): void {
-    const subGeo = new THREE.BoxGeometry(1.1, 1.8, 0.9);
-    const subMat = new THREE.MeshStandardMaterial({ color: 0x0b101d, roughness: 0.4, metalness: 0.8 });
+    const subGeo = new THREE.BoxGeometry(1.15, 1.8, 0.92);
+    // Sleek pro-audio dark textured cabinet
+    const subMat = new THREE.MeshStandardMaterial({ color: 0x131722, roughness: 0.55, metalness: 0.45 });
 
-    const coneGeo = new THREE.CylinderGeometry(0.38, 0.15, 0.14, 24);
-    const coneMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.2, metalness: 0.95 });
+    // Kevlar/carbon-composite bass driver cone
+    const coneGeo = new THREE.CylinderGeometry(0.38, 0.14, 0.14, 24);
+    const coneMat = new THREE.MeshStandardMaterial({ color: 0x222634, roughness: 0.35, metalness: 0.5 });
+
+    // Metallic center dust cap
+    const capGeo = new THREE.SphereGeometry(0.12, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.4);
+    const capMat = new THREE.MeshStandardMaterial({ color: 0x10121a, roughness: 0.2, metalness: 0.9 });
+
+    // Aluminum outer suspension surround ring
+    const ringGeo = new THREE.RingGeometry(0.37, 0.41, 32);
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0x556072, roughness: 0.25, metalness: 0.85, side: THREE.DoubleSide });
+
+    // Glowing accent halo around driver
+    const haloGeo = new THREE.RingGeometry(0.415, 0.43, 32);
 
     const positions = [-2.8, 2.8];
-    for (const x of positions) {
+    for (const [stackIdx, x] of positions.entries()) {
       const subStack = new THREE.Mesh(subGeo, subMat);
       subStack.position.set(x, 0.2, -0.6);
 
+      const accentColor = stackIdx === 0 ? 0xffb703 : 0xf72585;
+
       // 2 Large Speaker Cones per stack
       for (let k = 0; k < 2; k++) {
+        const coneGroup = new THREE.Group();
+        coneGroup.position.set(0, -0.4 + k * 0.8, 0.42);
+
         const cone = new THREE.Mesh(coneGeo, coneMat);
         cone.rotation.x = Math.PI / 2;
-        cone.position.set(0, -0.4 + k * 0.8, 0.42);
-        subStack.add(cone);
+        coneGroup.add(cone);
         this.speakerCones.push(cone);
+
+        const cap = new THREE.Mesh(capGeo, capMat);
+        cap.position.set(0, 0, 0.05);
+        cone.add(cap);
+
+        // Aluminum surround
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.position.set(0, 0, 0.07);
+        coneGroup.add(ring);
+
+        // Glowing accent rim around cone
+        const haloMat = new THREE.MeshBasicMaterial({ color: accentColor, side: THREE.DoubleSide });
+        const halo = new THREE.Mesh(haloGeo, haloMat);
+        halo.position.set(0, 0, 0.071);
+        coneGroup.add(halo);
+        this.speakerRings.push(halo);
+
+        subStack.add(coneGroup);
       }
 
-      // Neon frame around subwoofer
-      const subTrim = new THREE.Mesh(
-        new THREE.BoxGeometry(1.12, 1.82, 0.02),
-        new THREE.MeshBasicMaterial({ color: x < 0 ? 0x00f0ff : 0xff0077, wireframe: true })
+      // Pro-audio acoustic bass reflex port with ambient club underglow (no wireframe!)
+      const portBase = new THREE.Mesh(
+        new THREE.BoxGeometry(0.85, 0.12, 0.25),
+        new THREE.MeshStandardMaterial({ color: 0x080a10, roughness: 0.9 })
       );
-      subTrim.position.z = 0.46;
-      subStack.add(subTrim);
+      portBase.position.set(0, -0.78, 0.35);
+      subStack.add(portBase);
+
+      const portGlow = new THREE.Mesh(
+        new THREE.BoxGeometry(0.80, 0.03, 0.02),
+        new THREE.MeshBasicMaterial({ color: accentColor, transparent: true, opacity: 0.85 })
+      );
+      portGlow.position.set(0, -0.78, 0.47);
+      subStack.add(portGlow);
+      this.subGlows.push(portGlow);
+
+      // Subtle top anodized edge trim
+      const edgeTrim = new THREE.Mesh(
+        new THREE.BoxGeometry(1.16, 0.02, 0.02),
+        new THREE.MeshBasicMaterial({ color: accentColor })
+      );
+      edgeTrim.position.set(0, 0.89, 0.46);
+      subStack.add(edgeTrim);
 
       this.scene.add(subStack);
     }
@@ -378,7 +551,7 @@ export class FlyAvatar3D {
   // ─── Overhead Truss & Laser Beams ───────────────────────────────────────────
 
   private buildOverheadTruss(): void {
-    const trussMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.9, roughness: 0.3, wireframe: true });
+    const trussMat = new THREE.MeshStandardMaterial({ color: 0x2c223a, metalness: 0.85, roughness: 0.35, wireframe: true });
     
     // Crossbeam
     const beam = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.25, 0.25), trussMat);
@@ -392,21 +565,21 @@ export class FlyAvatar3D {
       this.scene.add(pillar);
     }
 
-    // 4 Moving Laser Light Cones
-    const laserColors = [0x00f0ff, 0xff0077, 0x00ff88, 0x9d4edd];
-    const coneBeamGeo = new THREE.ConeGeometry(0.45, 4.5, 16, 1, true);
+    // 3 Moving Laser Light Cones (Optimized count & segments for GPU cooling)
+    const laserColors = [0xffb703, 0xf72585, 0x00f0ff];
+    const coneBeamGeo = new THREE.ConeGeometry(0.42, 4.5, 10, 1, true);
 
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 3; i++) {
       const beamMat = new THREE.MeshBasicMaterial({
         color: laserColors[i],
         transparent: true,
-        opacity: 0.18,
+        opacity: 0.16,
         side: THREE.DoubleSide,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       });
       const laserMesh = new THREE.Mesh(coneBeamGeo, beamMat);
-      laserMesh.position.set(-2.2 + i * 1.46, 3.6, 0.2);
+      laserMesh.position.set(-1.8 + i * 1.8, 3.6, 0.2);
       laserMesh.rotation.x = Math.PI;
       this.laserBeams.push(laserMesh);
       this.scene.add(laserMesh);
@@ -422,14 +595,13 @@ export class FlyAvatar3D {
     const bandGeo = new THREE.TorusGeometry(0.18, 0.016, 12, 24, Math.PI);
     const bandMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.9, roughness: 0.2 });
     const headband = new THREE.Mesh(bandGeo, bandMat);
-    headband.rotation.x = Math.PI / 2;
-    headband.rotation.z = -Math.PI / 2;
+
     this.flyHeadphones.add(headband);
 
     // Ear Cups (Angled over the sides of the head)
     const cupGeo = new THREE.CylinderGeometry(0.065, 0.065, 0.035, 16);
     const cupMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.9, roughness: 0.15 });
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffb703 });
 
     for (const sign of [-1, 1]) {
       const cup = new THREE.Mesh(cupGeo, cupMat);
@@ -537,7 +709,7 @@ export class FlyAvatar3D {
     const matWingBrown = new THREE.MeshStandardMaterial({ color: 0x8b6914, roughness: 0.35, metalness: 0.05 });
     const matWingMembrane = new THREE.MeshStandardMaterial({
       color: 0xddeeff, roughness: 0.1, metalness: 0.05,
-      transparent: true, opacity: 0.38, side: THREE.DoubleSide,
+      transparent: true, opacity: 0.38, side: THREE.DoubleSide, depthWrite: false,
     });
     const matHaltere  = new THREE.MeshStandardMaterial({ color: 0xc8a84b, roughness: 0.5,  metalness: 0.1  });
 
@@ -553,57 +725,57 @@ export class FlyAvatar3D {
 
     // ── Ordered part list: key structural parts first ─────────────────────────
     // Wing files are detected by name for pivot-based flapping animation.
-    const parts: Array<{ file: string; isWing: boolean }> = [
+    const parts: Array<{ file: string }> = [
       // Thorax (main body center)
-      { file: 'thorax_body.obj',          isWing: false },
+      { file: 'thorax_body.obj'},
       // Head + sensory apparatus
-      { file: 'head_body.obj',            isWing: false },
-      { file: 'head_black.obj',           isWing: false },
-      { file: 'head_red.obj',             isWing: false },
-      { file: 'head_ocelli.obj',          isWing: false },
-      { file: 'haustellum_body.obj',      isWing: false },
-      { file: 'haustellum_black.obj',     isWing: false },
-      { file: 'rostrum_body.obj',         isWing: false },
-      { file: 'antenna_left_body.obj',    isWing: false },
-      { file: 'antenna_right_body.obj',   isWing: false },
-      { file: 'antenna_left_black.obj',   isWing: false },
-      { file: 'antenna_right_black.obj',  isWing: false },
+      { file: 'head_body.obj'},
+      { file: 'head_black.obj'},
+      { file: 'head_red.obj'},
+      { file: 'head_ocelli.obj'},
+      { file: 'haustellum_body.obj'},
+      { file: 'haustellum_black.obj'},
+      { file: 'rostrum_body.obj'},
+      { file: 'antenna_left_body.obj'},
+      { file: 'antenna_right_body.obj'},
+      { file: 'antenna_left_black.obj'},
+      { file: 'antenna_right_black.obj'},
       // Wings (animated)
-      { file: 'wing_left_brown.obj',      isWing: true  },
-      { file: 'wing_left_membrane.obj',   isWing: true  },
-      { file: 'wing_right_brown.obj',     isWing: true  },
-      { file: 'wing_right_membrane.obj',  isWing: true  },
+      { file: 'wing_left_brown.obj'},
+      { file: 'wing_left_membrane.obj'},
+      { file: 'wing_right_brown.obj'},
+      { file: 'wing_right_membrane.obj'},
       // Halteres (gyroscope organs)
-      { file: 'haltere_left_body.obj',    isWing: false },
-      { file: 'haltere_right_body.obj',   isWing: false },
+      { file: 'haltere_left_body.obj'},
+      { file: 'haltere_right_body.obj'},
       // Abdomen segments
-      { file: 'abdomen_1_body.obj',       isWing: false },
-      { file: 'abdomen_2_body.obj',       isWing: false },
-      { file: 'abdomen_3_body.obj',       isWing: false },
-      { file: 'abdomen_4_body.obj',       isWing: false },
-      { file: 'abdomen_5_body.obj',       isWing: false },
+      { file: 'abdomen_1_body.obj'},
+      { file: 'abdomen_2_body.obj'},
+      { file: 'abdomen_3_body.obj'},
+      { file: 'abdomen_4_body.obj'},
+      { file: 'abdomen_5_body.obj'},
       // Legs — T1 (front), T2 (mid), T3 (hind): coxa→femur→tibia
-      { file: 'coxa_T1_left_body.obj',    isWing: false },
-      { file: 'coxa_T1_right_body.obj',   isWing: false },
-      { file: 'femur_T1_left_body.obj',   isWing: false },
-      { file: 'femur_T1_right_body.obj',  isWing: false },
-      { file: 'tibia_T1_left_body.obj',   isWing: false },
-      { file: 'tibia_T1_right_body.obj',  isWing: false },
-      { file: 'coxa_T2_left_body.obj',    isWing: false },
-      { file: 'coxa_T2_right_body.obj',   isWing: false },
-      { file: 'femur_T2_left_body.obj',   isWing: false },
-      { file: 'femur_T2_right_body.obj',  isWing: false },
-      { file: 'tibia_T2_left_body.obj',   isWing: false },
-      { file: 'tibia_T2_right_body.obj',  isWing: false },
-      { file: 'coxa_T3_left_body.obj',    isWing: false },
-      { file: 'coxa_T3_right_body.obj',   isWing: false },
-      { file: 'femur_T3_left_body.obj',   isWing: false },
-      { file: 'femur_T3_right_body.obj',  isWing: false },
-      { file: 'tibia_T3_left_body.obj',   isWing: false },
-      { file: 'tibia_T3_right_body.obj',  isWing: false },
+      { file: 'coxa_T1_left_body.obj'},
+      { file: 'coxa_T1_right_body.obj'},
+      { file: 'femur_T1_left_body.obj'},
+      { file: 'femur_T1_right_body.obj'},
+      { file: 'tibia_T1_left_body.obj'},
+      { file: 'tibia_T1_right_body.obj'},
+      { file: 'coxa_T2_left_body.obj'},
+      { file: 'coxa_T2_right_body.obj'},
+      { file: 'femur_T2_left_body.obj'},
+      { file: 'femur_T2_right_body.obj'},
+      { file: 'tibia_T2_left_body.obj'},
+      { file: 'tibia_T2_right_body.obj'},
+      { file: 'coxa_T3_left_body.obj'},
+      { file: 'coxa_T3_right_body.obj'},
+      { file: 'femur_T3_left_body.obj'},
+      { file: 'femur_T3_right_body.obj'},
+      { file: 'tibia_T3_left_body.obj'},
+      { file: 'tibia_T3_right_body.obj'},
       // Labrum (mouthparts)
-      { file: 'labrum_left_lower.obj',    isWing: false },
-      { file: 'labrum_right_lower.obj',   isWing: false },
+      { file: 'labrum_left_lower.obj'},
+      { file: 'labrum_right_lower.obj'},
     ];
 
     const loader = new OBJLoader();
@@ -611,7 +783,7 @@ export class FlyAvatar3D {
 
     // Collect loaded meshes then finalize once all are done.
     let pending = parts.length;
-    const wingMeshes: THREE.Mesh[] = [];
+    const loadedParts = new Map<string, THREE.Group>();
 
     const finalize = () => {
       if (this.disposed) {
@@ -625,44 +797,94 @@ export class FlyAvatar3D {
         return;
       }
 
-      // Fit model to a consistent height in the scene.
-      const box = new THREE.Box3().setFromObject(modelGroup);
-      const size = box.getSize(new THREE.Vector3());
-      const center = box.getCenter(new THREE.Vector3());
-
-      const targetHeight = 0.85;
-      const scale = size.y > 0 ? targetHeight / size.y : 1.0;
-      modelGroup.scale.setScalar(scale);
-      modelGroup.position.set(
-        -center.x * scale,
-        -box.min.y * scale,
-        -center.z * scale,
-      );
-
-      this.flyRoot.add(modelGroup);
-      this.flyRoot.position.set(0, 0.02, 0.08);
-      this.scene.add(this.flyRoot);
-      this.flyRoot.updateWorldMatrix(true, true);
-
-      // Build pivot groups for wing flapping using named wing meshes.
-      for (const wingMesh of wingMeshes) {
-        const wbox = new THREE.Box3().setFromObject(wingMesh);
-        const wc = wbox.getCenter(new THREE.Vector3());
-        const lc = this.flyRoot.worldToLocal(wc.clone());
-
-        const pivot = new THREE.Group();
-        pivot.position.copy(lc);
-        this.flyRoot.add(pivot);
-        pivot.attach(wingMesh);
-        this.wingPivots.push(pivot);
+      // OBJ vertices use Z-up, -X-forward, with all parts in a shared rest frame.
+      // Convert once into stage coordinates: X=lateral, Y=up, Z=toward the decks.
+      // Normalize the BODY, excluding the long outstretched wings.
+      const basis = new THREE.Matrix4().set(
+        0, -1, 0, 0,  0, 0, 1, 0,  -1, 0, 0, 0,  0, 0, 0, 1);
+      const bodyBox = new THREE.Box3();
+      for (const [file, obj] of loadedParts) {
+        obj.traverse(child => {
+          if (child instanceof THREE.Mesh) child.geometry.applyMatrix4(basis);
+        });
+        if (/^(thorax|head|abdomen)/.test(file)) bodyBox.union(new THREE.Box3().setFromObject(obj));
       }
-
-      this.dopamineLight.position.set(0, targetHeight * 0.88, 0.14);
+      if (bodyBox.isEmpty()) return;
+      const bodyScale = 1.55 / (bodyBox.max.z - bodyBox.min.z);
+      // Recline the anatomy into an upright DJ stance about the thorax.
+      const stageTransform = new THREE.Matrix4().makeTranslation(0, .58, -.10)
+        .multiply(new THREE.Matrix4().makeRotationX(-.62))
+        .multiply(new THREE.Matrix4().makeScale(bodyScale, bodyScale, bodyScale))
+        .multiply(new THREE.Matrix4().makeTranslation(0, -1.1, 0));
+      const point = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
+        .applyMatrix4(basis).applyMatrix4(stageTransform);
+      modelGroup.traverse(child => {
+        if (child instanceof THREE.Mesh) child.geometry.applyMatrix4(stageTransform);
+      });
+      this.flyRoot.add(modelGroup);
+      this.flyRoot.position.set(0, .02, .08);
+      const pivotParts = (pivot: THREE.Group, origin: THREE.Vector3, files: string[]) => {
+        pivot.position.copy(origin);
+        modelGroup.add(pivot);
+        for (const file of files) {
+          const obj = loadedParts.get(file);
+          if (!obj) continue;
+          obj.position.copy(origin).negate();
+          pivot.add(obj);
+        }
+      };
+      pivotParts(this.headPivot, point(-.58, 0, 1.2), [...loadedParts.keys()].filter(file =>
+        /^(head|antenna|haustellum|rostrum|labrum)/.test(file)));
+      // Fit the headphones to the actual compound-eye bounds, and parent to the nodding head.
+      const headCenter = point(-.86, 0, 1.35);
+      this.flyHeadphones.position.copy(headCenter).sub(this.headPivot.position);
+      this.flyHeadphones.scale.setScalar(bodyScale * .92 / .36);
+      this.flyHeadphones.rotation.set(-.62, 0, 0);
+      this.headPivot.add(this.flyHeadphones);
+      for (const side of ['left', 'right'] as const) {
+        const sign = side === 'left' ? 1 : -1;
+        const pivot = new THREE.Group();
+        pivotParts(pivot, point(-.05, -sign * .40, 1.32),
+          [`wing_${side}_brown.obj`, `wing_${side}_membrane.obj`]);
+        pivot.userData.side = sign;
+        this.wingPivots.push(pivot);
+        // Keep each membrane and its veins on ONE shoulder pivot.
+        pivot.rotation.y = sign * 1.05;
+        for (const tier of ['T2', 'T3']) {
+          const leg = new THREE.Group();
+          pivotParts(leg, point(tier === 'T2' ? .1 : .33, -sign * .12, .75),
+            ['coxa', 'femur', 'tibia'].map(part => `${part}_${tier}_${side}_body.obj`));
+          leg.userData.side = sign;
+          this.legPivots.push(leg);
+        }
+        // Use the supplied front-leg meshes for the articulated arms, replacing placeholders.
+        const limb = sign < 0 ? this.leftLimb : this.rightLimb;
+        limb.position.copy(point(-.28, -sign * .15, .85));
+        const joints = [point(-.28, -sign * .15, .85), point(-.59, -sign * .55, .94), point(-.79, -sign * .71, .50)];
+        for (const [index, part] of ['femur', 'tibia'].entries()) {
+          const obj = loadedParts.get(`${part}_T1_${side}_body.obj`);
+          if (!obj) continue;
+          const direction = joints[index + 1].clone().sub(joints[index]);
+          const length = direction.length();
+          const normalize = new THREE.Matrix4().makeScale(1, 1 / length, 1)
+            .multiply(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion()
+              .setFromUnitVectors(direction.normalize(), new THREE.Vector3(0, 1, 0))))
+            .multiply(new THREE.Matrix4().makeTranslation(...joints[index].clone().add(joints[index + 1]).multiplyScalar(-.5).toArray()));
+          obj.traverse(child => { if (child instanceof THREE.Mesh) child.geometry.applyMatrix4(normalize); });
+          const segment = limb.children[index] as THREE.Mesh;
+          segment.geometry.dispose();
+          segment.geometry = new THREE.BufferGeometry();
+          segment.add(obj);
+        }
+        const coxa = loadedParts.get(`coxa_T1_${side}_body.obj`);
+        if (coxa) coxa.visible = false;
+      }
+      this.dopamineLight.position.copy(headCenter);
       this.flyRoot.add(this.dopamineLight);
       this.flyModelLoaded = true;
     };
 
-    for (const { file, isWing } of parts) {
+    for (const { file } of parts) {
       const mat = getMaterial(file);
       loader.load(
         `/models/flybody/${file}`,
@@ -670,9 +892,8 @@ export class FlyAvatar3D {
           obj.traverse(child => {
             if (!(child instanceof THREE.Mesh)) return;
             child.material = mat;
-            child.castShadow = true;
-            if (isWing) wingMeshes.push(child);
           });
+          loadedParts.set(file, obj);
           modelGroup.add(obj);
           pending--;
           if (pending === 0) finalize();
@@ -691,21 +912,30 @@ export class FlyAvatar3D {
   // ─── Particles ──────────────────────────────────────────────────────────────
 
   private buildParticles(): void {
-    const n = 280;
+    const n = 75; // Optimized count for GPU cooling
     const pos = new Float32Array(n * 3);
     const col = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       pos[i * 3]     = (Math.random() - 0.5) * 12;
       pos[i * 3 + 1] = Math.random() * 5.5 - 0.5;
       pos[i * 3 + 2] = (Math.random() - 0.5) * 12;
-      const cyan = Math.random() > 0.45;
-      col[i * 3] = cyan ? 0 : 1; col[i * 3 + 1] = cyan ? 0.95 : 0; col[i * 3 + 2] = 1;
+      const rnd = Math.random();
+      if (rnd < 0.5) {
+        // Ibiza warm gold
+        col[i * 3] = 1.0; col[i * 3 + 1] = 0.72; col[i * 3 + 2] = 0.05;
+      } else if (rnd < 0.8) {
+        // Sunset rose
+        col[i * 3] = 0.97; col[i * 3 + 1] = 0.15; col[i * 3 + 2] = 0.52;
+      } else {
+        // Twilight cyan
+        col[i * 3] = 0.0; col[i * 3 + 1] = 0.94; col[i * 3 + 2] = 1.0;
+      }
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('color',    new THREE.BufferAttribute(col, 3));
     this.particleSystem = new THREE.Points(geo, new THREE.PointsMaterial({
-      size: 0.045, vertexColors: true, transparent: true, opacity: 0.8,
+      size: 0.045, vertexColors: true, transparent: true, opacity: 0.75,
       blending: THREE.AdditiveBlending
     }));
     this.scene.add(this.particleSystem);
@@ -738,7 +968,7 @@ export class FlyAvatar3D {
     } else if (preset === 'dj') {
       this.targetAngleX = Math.PI - 0.2;
       this.targetAngleY = 0.72;
-      this.targetDistance = 2.4;
+      this.targetDistance = 3.6;
     } else if (preset === 'side') {
       this.targetAngleX = 0.78;
       this.targetAngleY = 0.42;
@@ -747,8 +977,9 @@ export class FlyAvatar3D {
   }
 
   private updateCameraPosition(): void {
-    const y  = Math.sin(this.cameraAngleY) * this.cameraDistance;
-    const hr = Math.cos(this.cameraAngleY) * this.cameraDistance;
+    const distance = this.cameraDistance * Math.max(1, 1.12 / this.camera.aspect);
+    const y  = Math.sin(this.cameraAngleY) * distance;
+    const hr = Math.cos(this.cameraAngleY) * distance;
     this.camera.position.set(Math.sin(this.cameraAngleX) * hr, y + 0.42, Math.cos(this.cameraAngleX) * hr + 0.5);
     this.camera.lookAt(0, 0.42, 0.35);
   }
@@ -777,18 +1008,23 @@ export class FlyAvatar3D {
 
   public update(audio: AudioFeatures, telemetry: CircuitTelemetry, dt: number, display: BridgeDisplayState = idleDisplay()): void {
     const frameDt = Number.isFinite(dt) ? Math.max(0, Math.min(.1, dt)) : 0;
-    const quiet = this.reducedMotion || !display.live;
+    const quiet = this.reducedMotion;
+    const demo = this.demoMoves && !display.live && !quiet;
+    this.danceTime += quiet ? 0 : frameDt;
     dt = quiet ? 0 : frameDt;
-    const c = { crossfader: display.crossfader.value, filterCutoff: display.filters[0].value };
+    const c = { crossfader: display.live ? display.crossfader.value : .5, filterCutoff: display.live ? display.filters[0].value : .5 };
     const isPAM = telemetry.dopamine > 0.25;
     const isPPL1 = telemetry.dopamine < -0.25;
     const stutter = false; // Cut feedback belongs to the dispatched button tap, not a body shake.
-    const time = quiet ? 0 : performance.now() * 0.001;
+    const time = this.danceTime;
+    const groove = demo ? .5 + .5 * Math.sin(time * Math.PI * 4) : Math.min(1, audio.subBass + audio.onset);
 
     if (quiet) {
       this.cameraAngleX = this.targetAngleX; this.cameraAngleY = this.targetAngleY; this.cameraDistance = this.targetDistance;
       this.flyRoot.position.set(0, .02, .08); this.flyRoot.rotation.set(0, 0, 0); this.flyRoot.scale.setScalar(1);
-      for (const pivot of this.wingPivots) pivot.rotation.z = 0;
+      this.headPivot.rotation.set(0, 0, 0);
+      for (const pivot of this.wingPivots) pivot.rotation.set(0, pivot.userData.side * 1.05, 0);
+      for (const pivot of this.legPivots) pivot.rotation.set(0, 0, 0);
     }
     // Smooth camera interpolation toward target angles
     this.cameraAngleX = THREE.MathUtils.lerp(this.cameraAngleX, this.targetAngleX, dt * 8.0);
@@ -797,7 +1033,7 @@ export class FlyAvatar3D {
     this.updateCameraPosition();
 
     // Smooth physics targets
-    const bobTarget = stutter ? 0.95 : Math.min(1.0, 0.15 + audio.subBass * 0.85 + (isPAM ? 0.35 : 0));
+    const bobTarget = stutter ? 0.95 : Math.min(1.0, 0.08 + groove * 0.65 + (isPAM ? 0.35 : 0));
     const pumpTarget = c.crossfader;
     this.currentBob = THREE.MathUtils.lerp(this.currentBob, bobTarget, dt * 18.0);
     this.currentPump = THREE.MathUtils.lerp(this.currentPump, pumpTarget, dt * 12.0);
@@ -829,15 +1065,17 @@ export class FlyAvatar3D {
       const breathe = 1 + Math.sin(time * 2.0) * 0.008 + this.currentBob * 0.025;
       this.flyRoot.scale.set(breathe, 1 + (breathe - 1) * 0.6, breathe);
 
-      // 5. Wings flutter on high frequencies & stutter
-      const wAmp = 0.08 + audio.highs * 0.24 + (stutter ? 0.28 : 0);
-      const wFreq = stutter ? 58.0 : 28.0;
-      for (let i = 0; i < this.wingPivots.length; i++) {
-        const pivot = this.wingPivots[i];
-        const phase = time * wFreq + i * 0.15;
-        const shaped = Math.sign(Math.sin(phase)) * Math.pow(Math.abs(Math.sin(phase)), 0.55);
-        const sign = pivot.position.x < -0.02 ? 1 : -1;
-        pivot.rotation.z = sign * shaped * wAmp;
+      this.headPivot.rotation.x = -.10 * groove + Math.sin(time * Math.PI * 4 - .4) * (demo ? .08 : .015);
+      this.headPivot.rotation.y = Math.sin(time * .65) * (demo ? .12 : .035);
+      for (const [i, leg] of this.legPivots.entries()) {
+        leg.rotation.z = Math.sin(time * Math.PI * 4 + i * Math.PI) * (demo ? .07 : .02);
+      }
+      // Shoulder-driven wing flicks, with slower movement that reads clearly on screen.
+      const flourish = demo ? Math.max(0, Math.sin(time * Math.PI / 4)) ** 8 : audio.highs;
+      for (const pivot of this.wingPivots) {
+        const sign = pivot.userData.side as number;
+        pivot.rotation.y = sign * (1.05 - flourish * .45);
+        pivot.rotation.z = sign * (Math.sin(time * 9) * (.025 + flourish * .14));
       }
 
       // Dopamine light near head
@@ -861,6 +1099,9 @@ export class FlyAvatar3D {
       knob.rotation.y = (display.filters[index].value - .5) * Math.PI * 1.6;
       (knob.material as THREE.MeshStandardMaterial).emissiveIntensity = display.filters[index].provenance === 'ax' ? .5 : 0;
     }
+    for (const [index, knob] of this.bassKnobs.entries()) {
+      knob.rotation.y = (display.bass[index].value - .5) * Math.PI * 1.6;
+    }
     this.ch1Fader.position.z = .11 - display.volumes[0].value * .06;
     this.ch2Fader.position.z = .11 - display.volumes[1].value * .06;
     // The matrices must include this frame's body bob before converting contact into local space.
@@ -871,16 +1112,39 @@ export class FlyAvatar3D {
     this.cutButton.position.y = .44; this.cutButton.updateWorldMatrix(true, false);
     const pose = this.animator.update(frameDt, display, {
       crossfader: contact(this.crossfaderKnob, .035), filter1: contact(this.filterKnob, .035),
-      filter2: contact(this.filterKnob2, .035), cut: contact(this.cutButton, .026),
+      filter2: contact(this.filterKnob2, .035),
+      bass1: contact(this.bassKnobs[0], .035), bass2: contact(this.bassKnobs[1], .035), cut: contact(this.cutButton, .026),
       leftRest: rest(-1), rightRest: rest(1),
     }, this.reducedMotion);
     this.cutButton.position.y -= pose.cut * .008;
     pose.right[1] -= pose.cut * .008;
     (this.cutButton.material as THREE.MeshStandardMaterial).emissiveIntensity = .15 + pose.cut;
-    this.poseLimb(this.leftLimb, pose.left, -1);
-    this.poseLimb(this.rightLimb, pose.right, 1);
+    if (demo) {
+      // Silent choreography only: never sends commands or changes reported mixer state.
+      const phrase = time % 16;
+      const scratch = Math.sin(time * Math.PI * 8) * .10;
+      if (phrase < 6) {
+        pose.left = contact(this.leftVinyl, .025);
+        pose.left[2] += scratch;
+        pose.right = contact(this.filterKnob2, .035);
+      } else if (phrase < 11) {
+        pose.left = this.flyHeadphones.localToWorld(new THREE.Vector3(-.17, 0, 0)).toArray() as Point;
+        pose.right = contact(this.rightVinyl, .025);
+        pose.right[2] += scratch;
+      } else {
+        pose.left = contact(this.crossfaderKnob, .035);
+        pose.right = this.flyRoot.localToWorld(new THREE.Vector3(.55, 1.25 + groove * .10, .15)).toArray() as Point;
+      }
+    }
+    // Smooth demo retargeting; live gestures already ease in BoothActionAnimator and retain exact contact.
+    for (const [i, limb] of [this.leftLimb, this.rightLimb].entries()) {
+      const target = new THREE.Vector3(...(i === 0 ? pose.left : pose.right));
+      if (quiet || display.live) this.handTips[i].copy(target);
+      else this.handTips[i].lerp(target, 1 - Math.exp(-frameDt * 18));
+      this.poseLimb(limb, this.handTips[i].toArray() as Point, i === 0 ? -1 : 1);
+    }
 
-    // Platters indicate confirmed transport only; no scratching or inferred playback.
+    // Platters indicate confirmed transport only; demo gestures never imply real playback.
     if (display.playing[0] === true) this.vinylRotL += 2.5 * dt;
     if (display.playing[1] === true) this.vinylRotR += 2.5 * dt;
     this.leftVinyl.rotation.y = this.vinylRotL;
@@ -893,6 +1157,12 @@ export class FlyAvatar3D {
     const punch = 1 + (quiet ? 0 : audio.subBass) * 0.35 + (stutter ? 0.2 : 0);
     for (const cone of this.speakerCones) {
       cone.scale.set(punch, punch, 1 + (quiet ? 0 : audio.subBass) * 0.55);
+    }
+    for (const ring of this.speakerRings) {
+      ring.scale.set(punch, punch, 1);
+    }
+    for (const glow of this.subGlows) {
+      (glow.material as THREE.MeshBasicMaterial).opacity = 0.35 + (quiet ? 0 : audio.subBass) * 0.65;
     }
 
     // ── Moving Laser Light Cones ────────────────────────────────────────────
@@ -951,12 +1221,8 @@ export class FlyAvatar3D {
 
     this.renderer.render(this.scene, this.camera);
   }
-  // Rendering separates acoustic stage decoration from evidence-backed equipment and gestures.
-  // The booth and hands share actual mesh contacts after body transforms; no neural output
-  // can fabricate fader, filter or platter activity. Unknown/stale evidence and reduced motion
-  // leave essential static control states visible while action travel is idle.
+  // Equipment reflects bridge evidence. Optional offline choreography animates the fly only;
+  // reduced motion keeps the rig still and preserves essential static control states.
 }
-// Module summary: The existing Three.js stage now consumes the bridge's evidence projection.
-// Native state and fresh dispatch events drive equipment and articulated front limbs, while
-// neural telemetry remains reward feedback only. Native/browser alignment still requires visual audit.
+// The fly uses the original FlyBody meshes; demo choreography never dispatches mixer commands.
 
