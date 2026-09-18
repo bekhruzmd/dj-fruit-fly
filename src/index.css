@@ -49,6 +49,11 @@ body, html {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  background-color: #0d041a;
+  background-image: url('/images/ibiza/ibiza_stacked_bg.jpg');
+  background-position: center center;
+  background-size: cover;
+  background-repeat: no-repeat;
 }
 
 /* 3D WebGL Canvas */

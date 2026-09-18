@@ -39,6 +39,12 @@ export default function App() {
   const [audioDevices, setAudioDevices] = useState<AudioInputDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [cameraPreset, setCameraPreset] = useState<'front' | 'dj' | 'side'>('side');
+  const [ibizaBg, setIbizaBg] = useState<'stacked' | 'triptych' | 'ushuaia' | 'hi' | 'panorama'>('stacked');
+
+  const handleSelectBg = (bg: 'stacked' | 'triptych' | 'ushuaia' | 'hi' | 'panorama') => {
+    setIbizaBg(bg);
+    avatar3DRef.current?.setBackground(bg);
+  };
 
   // UI State
   const [showHUD, setShowHUD] = useState<boolean>(true);
@@ -434,6 +440,22 @@ export default function App() {
             >
               DJ
             </button>
+          </div>
+
+          <div className="camera-select-chip" title="Ibiza Background Stack Mode">
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gold)', paddingLeft: '4px' }}>🌅 IBIZA</span>
+            <select
+              value={ibizaBg}
+              onChange={(e) => handleSelectBg(e.target.value as any)}
+              className="device-dropdown"
+              style={{ padding: '2px 6px', fontSize: '0.75rem', background: 'transparent', border: 'none', color: '#f8fafc', cursor: 'pointer', outline: 'none' }}
+            >
+              <option value="stacked" style={{ background: '#1a082c' }}>Stacked Vertical (All 3)</option>
+              <option value="triptych" style={{ background: '#1a082c' }}>Stacked Triptych (3-Panel)</option>
+              <option value="ushuaia" style={{ background: '#1a082c' }}>Ushuaïa Stage & Crowd</option>
+              <option value="hi" style={{ background: '#1a082c' }}>Hï Ibiza Cosmic Lasers</option>
+              <option value="panorama" style={{ background: '#1a082c' }}>UNVRS Coast Panorama</option>
+            </select>
           </div>
 
           <button

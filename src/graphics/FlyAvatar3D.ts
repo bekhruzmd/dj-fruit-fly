@@ -59,6 +59,10 @@ export class FlyAvatar3D {
   private particleSystem: THREE.Points;
   private rewardRing: THREE.Mesh;
 
+  // Ibiza Stacked Background
+  public currentBgMode: 'stacked' | 'triptych' | 'ushuaia' | 'hi' | 'panorama' = 'stacked';
+  private bgTextures: Map<string, THREE.Texture> = new Map();
+
   // Animation state
   private currentBob: number = 0;
   private currentPump: number = 0;
@@ -98,7 +102,7 @@ export class FlyAvatar3D {
     this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
     this.updateCameraPosition();
 
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'default' });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'default' });
     this.renderer.setSize(width, height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
     this.renderer.toneMapping = THREE.LinearToneMapping;
@@ -136,108 +140,34 @@ export class FlyAvatar3D {
     this.setupInteractivity(canvas);
   }
 
-  // ─── Ibiza Sunset Sky & Atmospheric Backdrop ─────────────────────────────
+  // ─── Ibiza Stacked Background ────────────────────────────────────────────
+
+  public setBackground(mode: 'stacked' | 'triptych' | 'ushuaia' | 'hi' | 'panorama'): void {
+    this.currentBgMode = mode;
+    const paths: Record<string, string> = {
+      stacked: '/images/ibiza/ibiza_stacked_bg.jpg',
+      triptych: '/images/ibiza/ibiza_stacked_triptych.jpg',
+      ushuaia: '/images/ibiza/ushuaia_stage.png',
+      hi: '/images/ibiza/hi_ibiza_lasers.png',
+      panorama: '/images/ibiza/ibiza_panorama.jpg',
+    };
+    const url = paths[mode] || paths.stacked;
+    if (this.bgTextures.has(url)) {
+      this.scene.background = this.bgTextures.get(url)!;
+      return;
+    }
+    const loader = new THREE.TextureLoader();
+    loader.load(url, (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      this.bgTextures.set(url, tex);
+      if (this.currentBgMode === mode) {
+        this.scene.background = tex;
+      }
+    });
+  }
 
   private buildIbizaSkyBackdrop(): void {
-    // 1. Procedural Ibiza Sunset Gradient Background Texture
-    const bgCanvas = document.createElement('canvas');
-    bgCanvas.width = 512;
-    bgCanvas.height = 512;
-    const ctx = bgCanvas.getContext('2d')!;
-
-    const skyGrad = ctx.createLinearGradient(0, 0, 0, 512);
-    skyGrad.addColorStop(0.00, '#0d041a'); // Deep twilight indigo
-    skyGrad.addColorStop(0.22, '#23073b'); // Deep royal purple
-    skyGrad.addColorStop(0.42, '#5e104b'); // Sunset orchid magenta
-    skyGrad.addColorStop(0.60, '#b83220'); // Fiery sunset crimson
-    skyGrad.addColorStop(0.74, '#e66b12'); // Glowing orange
-    skyGrad.addColorStop(0.85, '#ffad14'); // Golden amber
-    skyGrad.addColorStop(0.92, '#ffe082'); // Horizon glow
-    skyGrad.addColorStop(1.00, '#100722'); // Horizon sea base
-    ctx.fillStyle = skyGrad;
-    ctx.fillRect(0, 0, 512, 512);
-
-    // Warm glowing Ibiza sun near the sea horizon
-    const sunGrad = ctx.createRadialGradient(256, 435, 12, 256, 435, 130);
-    sunGrad.addColorStop(0, 'rgba(255, 245, 200, 0.85)');
-    sunGrad.addColorStop(0.35, 'rgba(255, 160, 40, 0.45)');
-    sunGrad.addColorStop(0.70, 'rgba(230, 60, 70, 0.20)');
-    sunGrad.addColorStop(1, 'rgba(20, 5, 30, 0)');
-    ctx.fillStyle = sunGrad;
-    ctx.beginPath();
-    ctx.arc(256, 435, 130, 0, Math.PI * 2);
-    ctx.fill();
-
-    const bgTexture = new THREE.CanvasTexture(bgCanvas);
-    this.scene.background = bgTexture;
-
-    // 2. Curved distant panoramic backdrop with Ibiza palm silhouettes & festival glow
-    const pCanvas = document.createElement('canvas');
-    pCanvas.width = 1024;
-    pCanvas.height = 256;
-    const pCtx = pCanvas.getContext('2d')!;
-    pCtx.clearRect(0, 0, 1024, 256);
-
-    // Distant coastal hills silhouette
-    pCtx.fillStyle = '#0f051c';
-    pCtx.beginPath();
-    pCtx.moveTo(0, 256);
-    pCtx.lineTo(0, 185);
-    pCtx.bezierCurveTo(180, 160, 320, 200, 512, 175);
-    pCtx.bezierCurveTo(700, 150, 850, 190, 1024, 180);
-    pCtx.lineTo(1024, 256);
-    pCtx.closePath();
-    pCtx.fill();
-
-    // Silhouette palm trees along horizon
-    const drawPalm = (px: number, py: number, scale: number) => {
-      pCtx.save();
-      pCtx.translate(px, py);
-      pCtx.scale(scale, scale);
-      pCtx.strokeStyle = '#0a0314';
-      pCtx.lineWidth = 3.5;
-      pCtx.beginPath();
-      pCtx.moveTo(0, 0);
-      pCtx.quadraticCurveTo(8, -25, 4, -55);
-      pCtx.stroke();
-      // Palm fronds
-      pCtx.lineWidth = 2;
-      const fronds = [-0.8, -0.4, 0, 0.4, 0.8, -1.1, 1.1];
-      for (const a of fronds) {
-        pCtx.beginPath();
-        pCtx.moveTo(4, -55);
-        pCtx.quadraticCurveTo(4 + a * 35, -55 - 12, 4 + a * 40, -40);
-        pCtx.stroke();
-      }
-      pCtx.restore();
-    };
-
-    const palms = [120, 160, 380, 420, 680, 720, 910, 950];
-    for (const px of palms) {
-      drawPalm(px, 210, 0.8 + Math.random() * 0.4);
-    }
-
-    // Warm festival stage ambient lighting dots
-    for (let i = 0; i < 28; i++) {
-      const lx = 40 + i * 34;
-      const ly = 195 + Math.sin(i * 0.8) * 8;
-      pCtx.fillStyle = i % 2 === 0 ? 'rgba(255, 183, 3, 0.6)' : 'rgba(247, 37, 133, 0.6)';
-      pCtx.beginPath();
-      pCtx.arc(lx, ly, 2.5, 0, Math.PI * 2);
-      pCtx.fill();
-    }
-
-    const pTex = new THREE.CanvasTexture(pCanvas);
-    const backdropGeo = new THREE.CylinderGeometry(28, 28, 14, 24, 1, true, -Math.PI * 0.75, Math.PI * 1.5);
-    const backdropMat = new THREE.MeshBasicMaterial({
-      map: pTex,
-      transparent: true,
-      side: THREE.BackSide,
-      depthWrite: false,
-    });
-    const backdropMesh = new THREE.Mesh(backdropGeo, backdropMat);
-    backdropMesh.position.set(0, 5.0, 0);
-    this.scene.add(backdropMesh);
+    this.setBackground('stacked');
   }
 
   // ─── Lighting ───────────────────────────────────────────────────────────────
