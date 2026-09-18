@@ -35,6 +35,6 @@ docs/CLAUDE.md
 docs/audio-evaluation.json
 docs/teaching/
 
-# Raw model source — production copy lives in public/models/fly/
+# Raw source model from original Sketchfab download (replaced by flybody)
 wildtype_male_drosophila_melanogaster/
 .vercel

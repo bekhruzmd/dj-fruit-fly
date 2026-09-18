@@ -18,7 +18,8 @@
     "lesson-builder": ".venv/bin/python -m lesson_builder.server",
     "test:lesson": ".venv/bin/python -m unittest discover -s tests -p \"test_lesson_builder.py\" -v",
     "test:lesson-loader": ".venv-snn/bin/python -m unittest discover -s tests -p \"test_lesson_loader.py\" -v",
-    "lesson:example": ".venv/bin/python scripts/make-lesson-example.py"
+    "lesson:example": ".venv/bin/python scripts/make-lesson-example.py",
+    "bridge": ".venv/bin/python scripts/djay_bridge.py"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",

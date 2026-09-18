@@ -51,6 +51,12 @@ export class AudioFeatureExtractor {
     this.activeSourceNode.connect(this.analyser);
   }
 
+  public connectStream(stream: MediaStream): MediaStreamAudioSourceNode {
+    const streamNode = this.ctx.createMediaStreamSource(stream);
+    this.connectSource(streamNode);
+    return streamNode;
+  }
+
   public disconnectSource(): void {
     if (this.activeSourceNode) {
       try {

@@ -1233,3 +1233,234 @@ body, html {
 .demo-panel caption { text-align: left; color: #cbd5e1; }
 .demo-panel td, .demo-panel th { padding: 4px; }
 .demo-panel button:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Live djay (Spotify) Mode Components */
+.mode-toggle-chip {
+  display: flex;
+  background: rgba(13, 19, 34, 0.85);
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  padding: 3px;
+  gap: 4px;
+}
+
+.mode-sub-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.2s ease;
+}
+
+.mode-sub-btn:hover {
+  color: var(--text-main);
+}
+
+.mode-sub-btn.active {
+  background: rgba(0, 240, 255, 0.15);
+  color: var(--cyan);
+  border: 1px solid var(--cyan);
+}
+
+.mode-sub-btn.active.live {
+  background: rgba(0, 255, 136, 0.15);
+  color: var(--green);
+  border: 1px solid var(--green);
+}
+
+.live-djay-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  max-width: 800px;
+}
+
+.live-badge-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 255, 136, 0.1);
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  color: var(--green);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.device-select-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(13, 19, 34, 0.85);
+  border: 1px solid var(--panel-border);
+  padding: 4px 8px;
+  border-radius: 8px;
+  flex: 1;
+  min-width: 180px;
+}
+
+.device-dropdown {
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  flex: 1;
+  outline: none;
+  cursor: pointer;
+}
+
+.device-dropdown option {
+  background: #0d1322;
+  color: #fff;
+}
+
+.refresh-devices-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  transition: color 0.2s ease;
+}
+
+.refresh-devices-btn:hover {
+  color: var(--cyan);
+}
+
+.bridge-status-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.bridge-status-chip.connected {
+  background: rgba(0, 255, 136, 0.1);
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  color: var(--green);
+}
+
+.bridge-status-chip.disconnected {
+  background: rgba(255, 0, 119, 0.1);
+  border: 1px solid rgba(255, 0, 119, 0.3);
+  color: var(--pink);
+}
+
+.live-instructions-banner {
+  background: rgba(6, 12, 24, 0.9);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin: 8px 16px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.live-instructions-banner strong {
+  color: var(--cyan);
+}
+
+/* Camera Angle Selector */
+.camera-select-chip {
+  display: flex;
+  align-items: center;
+  background: rgba(13, 19, 34, 0.85);
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  padding: 2px 6px;
+  gap: 3px;
+}
+
+.cam-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cam-btn:hover {
+  color: var(--cyan);
+}
+
+.cam-btn.active {
+  background: rgba(0, 240, 255, 0.18);
+  color: var(--cyan);
+  border: 1px solid var(--cyan);
+}
+
+/* RL Feedback Actions */
+.rl-feedback-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.feedback-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.feedback-btn.reward {
+  background: rgba(0, 255, 136, 0.12);
+  border: 1px solid rgba(0, 255, 136, 0.4);
+  color: var(--green);
+}
+
+.feedback-btn.reward:hover {
+  background: rgba(0, 255, 136, 0.25);
+  box-shadow: 0 0 16px rgba(0, 255, 136, 0.4);
+  transform: translateY(-1px);
+}
+
+.feedback-btn.penalty {
+  background: rgba(255, 0, 119, 0.12);
+  border: 1px solid rgba(255, 0, 119, 0.4);
+  color: var(--pink);
+}
+
+.feedback-btn.penalty:hover {
+  background: rgba(255, 0, 119, 0.25);
+  box-shadow: 0 0 16px rgba(255, 0, 119, 0.4);
+  transform: translateY(-1px);
+}
+
+

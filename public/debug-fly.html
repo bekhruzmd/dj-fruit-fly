@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>fly debug</title>
+<style>html,body{margin:0;background:#222;} #label{position:fixed;top:0;left:0;color:#fff;font:14px monospace;background:#000a;padding:4px;z-index:9}</style>
+</head>
+<body>
+<div id="label">loading...</div>
+<canvas id="c" width="1200" height="900"></canvas>
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.186.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'https://unpkg.com/three@0.186.0/examples/jsm/loaders/GLTFLoader.js';
+
+const colors = [
+  0xff0000,0x00ff00,0x0000ff,0xffff00,0xff00ff,0x00ffff,
+  0xffffff,0xff8800,0x8800ff,0x00ff88,0xff0088,0x88ff00,
+  0x0088ff,0x888888,0xffaaaa,0xaaffaa
+];
+
+const canvas = document.getElementById('c');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x222222);
+const camera = new THREE.PerspectiveCamera(45, 1200/900, 0.01, 1000);
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setSize(1200,900);
+scene.add(new THREE.AmbientLight(0xffffff, 2.0));
+const dl = new THREE.DirectionalLight(0xffffff, 2.0); dl.position.set(3,5,4); scene.add(dl);
+const dl2 = new THREE.DirectionalLight(0xffffff, 1.0); dl2.position.set(-3,-2,-4); scene.add(dl2);
+
+window.meshList = [];
+
+const loader = new GLTFLoader();
+loader.load('/models/fly/scene.gltf', (gltf) => {
+  const model = gltf.scene;
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const scale = 2.0 / size.y;
+  model.scale.setScalar(scale);
+  model.position.set(-center.x*scale, -box.min.y*scale, -center.z*scale);
+
+  let idx = 0;
+  model.traverse((child) => {
+    if (!(child.isMesh)) return;
+    child.material = new THREE.MeshStandardMaterial({ color: colors[idx % colors.length], roughness: 0.6 });
+    window.meshList.push({ idx, name: child.name, uuid: child.uuid });
+    idx++;
+  });
+  scene.add(model);
+
+  document.getElementById('label').textContent = 'loaded ' + idx + ' meshes';
+  window.__loaded = true;
+});
+
+function setCam(azimuthDeg, elevDeg, dist) {
+  const az = azimuthDeg * Math.PI/180, el = elevDeg*Math.PI/180;
+  camera.position.set(Math.sin(az)*Math.cos(el)*dist, Math.sin(el)*dist + 1.0, Math.cos(az)*Math.cos(el)*dist);
+  camera.lookAt(0,1.0,0);
+}
+window.setCam = setCam;
+setCam(30, 20, 4);
+
+function animate(){ requestAnimationFrame(animate); renderer.render(scene,camera); }
+animate();
+
+// toggle visibility of all meshes except one index, for isolation shots
+window.isolateMesh = function(onlyIdx) {
+  let idx = 0;
+  scene.traverse((child) => {
+    if (!(child.isMesh)) return;
+    child.visible = (onlyIdx === -1) || (idx === onlyIdx);
+    idx++;
+  });
+};
+</script>
+</body>
+</html>
